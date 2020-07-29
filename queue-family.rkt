@@ -19,10 +19,3 @@
 
 |#
 
-; TODO syntax rules for setting/loading configuration...
-(chowder-config (video (resolution (cons 800 600))
-                       (init-pos (cons 0 0))
-                       (fullscreen? 0)
-                       (selected-device 0)))
-
-

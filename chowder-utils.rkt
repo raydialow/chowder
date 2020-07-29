@@ -19,10 +19,9 @@
 
 |#
 
-; TODO syntax rules for setting/loading configuration...
-(chowder-config (video (resolution (cons 800 600))
-                       (init-pos (cons 0 0))
-                       (fullscreen? 0)
-                       (selected-device 0)))
+(provide (all-defined-out))
 
-
+(define (hash-remove* hash keys)
+  (if (zero? (length keys))
+      hash
+      (hash-remove* (hash-remove hash (car keys)) (cdr keys))))
