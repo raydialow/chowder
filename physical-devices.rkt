@@ -22,6 +22,7 @@
 (require racket/hash
          ffi/unsafe
          vulkan/unsafe
+         "chowder-config.rkt"
          "instance.rkt")
 
 (define (get-device-name carray)
@@ -46,8 +47,6 @@
       (vkEnumeratePhysicalDevices vkinstance devcount-ptr phys-devices-ptr)
       (let ([phys-devices-props-ptr
              (malloc 'raw (_array _VkPhysicalDeviceProperties devcount))]
-            [phys-devices-feats-ptr
-             (malloc 'raw (_array _VkPhysicalDeviceFeatures devcount))]
             [queue-family-counts-ptr
              (malloc 'raw (_array _uint32 devcount))])
         (for ([iter-dev (in-range devcount)])
@@ -59,14 +58,6 @@
            (ptr-add phys-devices-props-ptr
                     iter-dev
                     _VkPhysicalDeviceProperties))
-          ; getting features of each phys dev
-          (vkGetPhysicalDeviceFeatures
-           (ptr-ref (ptr-add phys-devices-ptr
-                             iter-dev
-                             _VkPhysicalDevice) _VkPhysicalDevice)
-           (ptr-add phys-devices-feats-ptr
-                    iter-dev
-                    _VkPhysicalDeviceFeatures))
           ; getting number of queue families in each phys dev
           (vkGetPhysicalDeviceQueueFamilyProperties
            (ptr-ref (ptr-add phys-devices-ptr
@@ -82,13 +73,33 @@
                              (ptr-ref (ptr-add phys-devices-props-ptr
                                                iter-dev
                                                _VkPhysicalDeviceProperties)
-                                      _VkPhysicalDeviceProperties)))))
-          ) ;close for
+                                      _VkPhysicalDeviceProperties))))))
+        (let ([vfx-dev-avail
+               (build-list
+                (ptr-ref devcount-ptr _uint32)
+                (λ (n) (get-device-name
+                        (VkPhysicalDeviceProperties-deviceName 
+                         (ptr-ref (ptr-add phys-devices-props-ptr
+                                           n
+                                           _VkPhysicalDeviceProperties)
+                                  _VkPhysicalDeviceProperties)))))])
+          (if (equal? (hash-ref current-config "vfx-dev-avail") vfx-dev-avail)
+              null
+              (begin
+                (hash-set! current-config "vfx-dev-avail" vfx-dev-avail)
+                (save-config current-config))))
+        (free devcount-ptr)
+        (free phys-devices-props-ptr)
+        (let ([phys-dev-ptr (malloc 'raw _VkPhysicalDevice)])
+          (ptr-set! phys-dev-ptr
+                    _VkPhysicalDevice
+                    (ptr-ref (ptr-add phys-devices-ptr
+                                     (hash-ref current-config "vfx-dev-sel")
+                                     _VkPhysicalDevice)
+                             _VkPhysicalDevice))
+          (free phys-devices-ptr)
         (hash-union state
-                    (hash 'phys-dev-count devcount-ptr
-                          'phys-devs phys-devices-ptr
-                          'phys-devs-props phys-devices-props-ptr
-                          'phys-devs-feats phys-devices-feats-ptr))))))
+                    (hash 'phys-dev phys-dev-ptr)))))))
 
 ;;test
 (free-instance (get-phys-devs (make-instance)))

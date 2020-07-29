@@ -27,6 +27,7 @@
          ; see: https://github.com/lockie/racket-sdl2/issues/3.
          ; AND _VkInstance is already provided by vulkan/unsafe.
          (except-in "racket-sdl2/main.rkt" _VkInstance)
+         "chowder-config.rkt"
          "chowder-utils.rkt")
 
 (provide make-instance free-instance)
@@ -45,7 +46,14 @@
 (define (make-window-ptr)
   (begin (SDL_Init 'SDL_INIT_EVERYTHING)
          (display "Initialized SDL2.\n")
-         (SDL_CreateWindow "Chowder" 0 0 800 640 'SDL_WINDOW_VULKAN)))
+         (SDL_CreateWindow "Chowder"
+                           0
+                           0
+                           (hash-ref current-config "vfx-width")
+                           (hash-ref current-config "vfx-height")
+                           (if (hash-ref current-config "vfx-fullscreen")
+                               (list 'SDL_WINDOW_VULKAN 'SDL_WINDOW_FULLSCREEN)
+                               'SDL_WINDOW_VULKAN))))
 
 ; composes make-window-ptr to get vulkan extension count and names
 (define (make-sdl2-window-info)

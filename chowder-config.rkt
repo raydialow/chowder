@@ -19,10 +19,15 @@
 
 |#
 
-; TODO syntax rules for setting/loading configuration...
-(chowder-config (video (resolution (cons 800 600))
-                       (init-pos (cons 0 0))
-                       (fullscreen? 0)
-                       (selected-device 0)))
+(require yaml)
 
+(provide load-config save-config current-config)
 
+(define (load-config)
+  (with-input-from-file "config.yaml" read-yaml))
+
+(define (save-config config)
+  (with-output-to-file "config.yaml" #:exists 'replace
+    (λ () (write-yaml config))))
+
+(define current-config (load-config))
