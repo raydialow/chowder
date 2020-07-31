@@ -25,6 +25,8 @@
          "chowder-config.rkt"
          "instance.rkt")
 
+(provide get-phys-dev)
+
 (define (get-device-name carray)
   (string-trim 
    (build-string VK_MAX_PHYSICAL_DEVICE_NAME_SIZE
@@ -34,21 +36,29 @@
                          ch
                          #\space))))))
 
-(define (get-phys-devs state)
+; Grabs one physical device. The first one by default.
+; this procedure assumes it has been passed a state created by make-instance
+(define (get-phys-dev state)
   (let ([vkinstance (ptr-ref (hash-ref state 'vkinst) _VkInstance)]
         [devcount-ptr (malloc 'raw _uint32)])
+    ; initialize devcount bc vkEnumeratePhysicalDevices
+    ; will not set to zero if devices are not found
+    (ptr-set! devcount-ptr _uint32 0) 
     (vkEnumeratePhysicalDevices vkinstance devcount-ptr #f)
     (display (format "Found ~a physical devices.\n"
                      (ptr-ref devcount-ptr _uint32)))
+    ; if there are no suitable devices, shut down
+    (unless (positive? (ptr-ref devcount-ptr _uint32))
+      (begin (display "Found no suitable graphics cards. Shutting down.")
+             (free-instance state)))
     (let* ([devcount
             (ptr-ref devcount-ptr _uint32)]
            [phys-devices-ptr
             (malloc 'raw (_array _VkPhysicalDevice devcount))])
+      ; grabbing handles for each physical device
       (vkEnumeratePhysicalDevices vkinstance devcount-ptr phys-devices-ptr)
       (let ([phys-devices-props-ptr
-             (malloc 'raw (_array _VkPhysicalDeviceProperties devcount))]
-            [queue-family-counts-ptr
-             (malloc 'raw (_array _uint32 devcount))])
+             (malloc 'raw (_array _VkPhysicalDeviceProperties devcount))])
         (for ([iter-dev (in-range devcount)])
           ; getting properties of each phys dev
           (vkGetPhysicalDeviceProperties
@@ -58,15 +68,6 @@
            (ptr-add phys-devices-props-ptr
                     iter-dev
                     _VkPhysicalDeviceProperties))
-          ; getting number of queue families in each phys dev
-          (vkGetPhysicalDeviceQueueFamilyProperties
-           (ptr-ref (ptr-add phys-devices-ptr
-                             iter-dev
-                             _VkPhysicalDevice) _VkPhysicalDevice)
-           (ptr-add queue-family-counts-ptr
-                    iter-dev
-                    _uint32)
-           #f)
           (display (format "Found physical device called: ~a.\n"
                            (get-device-name
                             (VkPhysicalDeviceProperties-deviceName 
@@ -74,6 +75,7 @@
                                                iter-dev
                                                _VkPhysicalDeviceProperties)
                                       _VkPhysicalDeviceProperties))))))
+        ; if this is a different list than stored in settings, apply new setting
         (let ([vfx-dev-avail
                (build-list
                 (ptr-ref devcount-ptr _uint32)
@@ -88,8 +90,10 @@
               (begin
                 (hash-set! current-config "vfx-dev-avail" vfx-dev-avail)
                 (save-config current-config))))
+        ; free the memory we dont need anymore
         (free devcount-ptr)
         (free phys-devices-props-ptr)
+        ; ... making sure to keep the physical device we want ...
         (let ([phys-dev-ptr (malloc 'raw _VkPhysicalDevice)])
           (ptr-set! phys-dev-ptr
                     _VkPhysicalDevice
@@ -98,8 +102,7 @@
                                      _VkPhysicalDevice)
                              _VkPhysicalDevice))
           (free phys-devices-ptr)
-        (hash-union state
-                    (hash 'phys-dev phys-dev-ptr)))))))
+          ; return new state with selected physical device
+          (hash-set state 'phys-dev phys-dev-ptr))))))
 
-;;test
-(free-instance (get-phys-devs (make-instance)))
+

@@ -26,7 +26,7 @@
          ; SDL_Vulkan_GetInstanceExtensions
          ; see: https://github.com/lockie/racket-sdl2/issues/3.
          ; AND _VkInstance is already provided by vulkan/unsafe.
-         (except-in "racket-sdl2/main.rkt" _VkInstance)
+         (except-in sdl2 _VkInstance)
          "chowder-config.rkt"
          "chowder-utils.rkt")
 
@@ -47,8 +47,7 @@
   (begin (SDL_Init 'SDL_INIT_EVERYTHING)
          (display "Initialized SDL2.\n")
          (SDL_CreateWindow "Chowder"
-                           0
-                           0
+                           0 0 ;window pos
                            (hash-ref current-config "vfx-width")
                            (hash-ref current-config "vfx-height")
                            (if (hash-ref current-config "vfx-fullscreen")
@@ -62,34 +61,25 @@
     (display "Created SDL2 window.\n")
     (cpointer-push-tag! extcount-ptr 'uint*)
     (SDL_Vulkan_GetInstanceExtensions window-ptr extcount-ptr #f)
-    (let ([extnames-ptr (malloc 'raw
-                                (_array _string
-                                        (ptr-ref extcount-ptr _uint32)))])
-      (SDL_Vulkan_GetInstanceExtensions window-ptr
-                                        extcount-ptr
-                                        extnames-ptr)
+    (let ([extnames-ptr (malloc 'raw (_array _string (ptr-ref extcount-ptr _uint32)))])
+      (SDL_Vulkan_GetInstanceExtensions window-ptr extcount-ptr extnames-ptr)
       (hash 'window window-ptr
             'extcount extcount-ptr
             'extnames extnames-ptr))))
 
 (define (make-inst-create-info)
-  (let ([state (hash-set (make-sdl2-window-info)
-                          'appinfo (make-application-info))])
-        (hash-set
-         state
-         'inst-create-info
-         (make-VkInstanceCreateInfo VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO
-                                    #f ;pNext
-                                    0 ;flags
-                                    (hash-ref state 'appinfo) ;pApplicationInfo
-                                    0 ;enabledLayerCount
-                                    #f ;ppEnabledLayerNames
-                                    (ptr-ref
-                                     (hash-ref state 'extcount)
-                                     _uint32) ;enabledExtensionCount
-                                    (hash-ref state 'extnames)
-                                    ;ppEnabledExtensionNames
-                                    ))))
+  (let ([state (hash-set (make-sdl2-window-info) 'appinfo (make-application-info))])
+        (hash-set state 'inst-create-info
+                  (make-VkInstanceCreateInfo VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO
+                                             #f ;pNext
+                                             0 ;flags
+                                             (hash-ref state 'appinfo) ;pApplicationInfo
+                                             0 ;enabledLayerCount
+                                             #f ;ppEnabledLayerNames
+                                             (ptr-ref
+                                              (hash-ref state 'extcount)
+                                              _uint32) ;enabledExtensionCount
+                                             (hash-ref state 'extnames)))))
   
 
 ; composes make-proto-instance-data to create vkinstance with associated window
@@ -114,5 +104,5 @@
     (hash-for-each
      (hash-remove* instdata (list 'vkinst 'window 'inst-create-info 'appinfo))
      (λ (k v) (begin (display (format "Freeing ~a.\n" (symbol->string k)))
-                     (free v))))))
-
+                     (free v))))
+    (exit)))
