@@ -21,7 +21,7 @@
 
 (require yaml)
 
-(provide load-config save-config current-config)
+(provide (all-defined-out))
 
 (define (load-config)
   (with-input-from-file "config.yaml" read-yaml))
@@ -31,3 +31,11 @@
     (λ () (write-yaml config))))
 
 (define current-config (load-config))
+
+(define (get-config key-string)
+  (hash-ref current-config key-string))
+
+(define (set-config! key-string value)
+  (begin
+    (hash-set! current-config key-string value)
+    (save-config current-config)))

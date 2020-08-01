@@ -19,9 +19,16 @@
 
 |#
 
+(require ffi/unsafe)
+
 (provide (all-defined-out))
 
-(define (hash-remove* hash keys)
-  (if (zero? (length keys))
-      hash
-      (hash-remove* (hash-remove hash (car keys)) (cdr keys))))
+(define (hash-remove* hash . keys)
+  (letrec ([remover (λ (hash lst)
+                      (if (zero? (length lst))
+                          hash
+                          (remover (hash-remove hash (car lst)) (cdr lst))))])
+    (remover hash keys)))
+
+(define (free* . cpointers)
+  (display (format "~a" (cdr cpointers))))

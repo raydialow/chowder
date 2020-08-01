@@ -27,8 +27,9 @@
          ; see: https://github.com/lockie/racket-sdl2/issues/3.
          ; AND _VkInstance is already provided by vulkan/unsafe.
          (except-in sdl2 _VkInstance)
-         "chowder-config.rkt"
-         "chowder-utils.rkt")
+         "allocators.rkt"
+         "config.rkt"
+         "utilities.rkt")
 
 (provide make-instance free-instance)
 
@@ -48,20 +49,20 @@
          (display "Initialized SDL2.\n")
          (SDL_CreateWindow "Chowder"
                            0 0 ;window pos
-                           (hash-ref current-config "vfx-width")
-                           (hash-ref current-config "vfx-height")
-                           (if (hash-ref current-config "vfx-fullscreen")
+                           (get-config "vfx-width")
+                           (get-config "vfx-height")
+                           (if (get-config "vfx-fullscreen")
                                (list 'SDL_WINDOW_VULKAN 'SDL_WINDOW_FULLSCREEN)
                                'SDL_WINDOW_VULKAN))))
 
 ; composes make-window-ptr to get vulkan extension count and names
 (define (make-sdl2-window-info)
   (let ([window-ptr (make-window-ptr)]
-        [extcount-ptr (malloc 'raw _uint32)])
+        [extcount-ptr (A-uint32)])
     (display "Created SDL2 window.\n")
     (cpointer-push-tag! extcount-ptr 'uint*)
     (SDL_Vulkan_GetInstanceExtensions window-ptr extcount-ptr #f)
-    (let ([extnames-ptr (malloc 'raw (_array _string (ptr-ref extcount-ptr _uint32)))])
+    (let ([extnames-ptr (A*-string (ptr-ref extcount-ptr _uint32))])
       (SDL_Vulkan_GetInstanceExtensions window-ptr extcount-ptr extnames-ptr)
       (hash 'window window-ptr
             'extcount extcount-ptr
@@ -76,16 +77,15 @@
                                              (hash-ref state 'appinfo) ;pApplicationInfo
                                              0 ;enabledLayerCount
                                              #f ;ppEnabledLayerNames
-                                             (ptr-ref
-                                              (hash-ref state 'extcount)
-                                              _uint32) ;enabledExtensionCount
+                                             (ptr-ref (hash-ref state 'extcount)
+                                                      _uint32) ;enabledExtensionCount
                                              (hash-ref state 'extnames)))))
   
 
 ; composes make-proto-instance-data to create vkinstance with associated window
 ; returns a hash containing pointers to the required data
 (define (make-instance)
-  (let* ([vkinst-ptr (malloc 'raw _VkInstance)]
+  (let* ([vkinst-ptr (A-VkInstance)]
          [state (make-inst-create-info)])
     (vkCreateInstance (hash-ref state 'inst-create-info) #f vkinst-ptr)
     (cpointer-push-tag! vkinst-ptr 'VkInstance_T)
@@ -100,9 +100,4 @@
     (SDL_DestroyWindow (hash-ref instdata 'window))
     (display "Freed SDL2 window.\n")
     (SDL_Quit)
-    (display "Shutdown SDL2.\n")
-    (hash-for-each
-     (hash-remove* instdata (list 'vkinst 'window 'inst-create-info 'appinfo))
-     (λ (k v) (begin (display (format "Freeing ~a.\n" (symbol->string k)))
-                     (free v))))
-    (exit)))
+    (display "Shutdown SDL2.\n")))

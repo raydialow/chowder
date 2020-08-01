@@ -22,7 +22,8 @@
 (require racket/hash
          ffi/unsafe
          vulkan/unsafe
-         "chowder-config.rkt"
+         "allocators.rkt"
+         "config.rkt"
          "instance.rkt")
 
 (provide get-phys-dev)
@@ -40,25 +41,21 @@
 ; this procedure assumes it has been passed a state created by make-instance
 (define (get-phys-dev state)
   (let ([vkinstance (ptr-ref (hash-ref state 'vkinst) _VkInstance)]
-        [devcount-ptr (malloc 'raw _uint32)])
+        [devcount-ptr (A-uint32)])
     ; initialize devcount bc vkEnumeratePhysicalDevices
     ; will not set to zero if devices are not found
     (ptr-set! devcount-ptr _uint32 0) 
     (vkEnumeratePhysicalDevices vkinstance devcount-ptr #f)
-    (display (format "Found ~a physical devices.\n"
-                     (ptr-ref devcount-ptr _uint32)))
+    (display (format "Found ~a physical devices.\n" (ptr-ref devcount-ptr _uint32)))
     ; if there are no suitable devices, shut down
     (unless (positive? (ptr-ref devcount-ptr _uint32))
       (begin (display "Found no suitable graphics cards. Shutting down.")
              (free-instance state)))
-    (let* ([devcount
-            (ptr-ref devcount-ptr _uint32)]
-           [phys-devices-ptr
-            (malloc 'raw (_array _VkPhysicalDevice devcount))])
+    (let* ([devcount (ptr-ref devcount-ptr _uint32)]
+           [phys-devices-ptr (A*-VkPhysicalDevice devcount)])
       ; grabbing handles for each physical device
       (vkEnumeratePhysicalDevices vkinstance devcount-ptr phys-devices-ptr)
-      (let ([phys-devices-props-ptr
-             (malloc 'raw (_array _VkPhysicalDeviceProperties devcount))])
+      (let ([phys-devices-props-ptr (A*-VkPhysicalDeviceProperties devcount)])
         (for ([iter-dev (in-range devcount)])
           ; getting properties of each phys dev
           (vkGetPhysicalDeviceProperties
@@ -75,33 +72,26 @@
                                                iter-dev
                                                _VkPhysicalDeviceProperties)
                                       _VkPhysicalDeviceProperties))))))
-        ; if this is a different list than stored in settings, apply new setting
+        ; if this is a different list than stored in config, apply new config
         (let ([vfx-dev-avail
-               (build-list
-                (ptr-ref devcount-ptr _uint32)
-                (λ (n) (get-device-name
-                        (VkPhysicalDeviceProperties-deviceName 
-                         (ptr-ref (ptr-add phys-devices-props-ptr
-                                           n
-                                           _VkPhysicalDeviceProperties)
-                                  _VkPhysicalDeviceProperties)))))])
-          (if (equal? (hash-ref current-config "vfx-dev-avail") vfx-dev-avail)
+               (build-list (ptr-ref devcount-ptr _uint32)
+                           (λ (n) (get-device-name
+                                   (VkPhysicalDeviceProperties-deviceName 
+                                    (ptr-ref (ptr-add phys-devices-props-ptr
+                                                      n
+                                                      _VkPhysicalDeviceProperties)
+                                             _VkPhysicalDeviceProperties)))))])
+          (if (equal? (get-config "vfx-dev-avail") vfx-dev-avail)
               null
-              (begin
-                (hash-set! current-config "vfx-dev-avail" vfx-dev-avail)
-                (save-config current-config))))
-        ; free the memory we dont need anymore
-        (free devcount-ptr)
-        (free phys-devices-props-ptr)
+              (set-config! "vfx-dev-avail" vfx-dev-avail)))
         ; ... making sure to keep the physical device we want ...
-        (let ([phys-dev-ptr (malloc 'raw _VkPhysicalDevice)])
+        (let ([phys-dev-ptr (A-VkPhysicalDevice)])
           (ptr-set! phys-dev-ptr
                     _VkPhysicalDevice
                     (ptr-ref (ptr-add phys-devices-ptr
-                                     (hash-ref current-config "vfx-dev-sel")
+                                     (get-config "vfx-dev-sel")
                                      _VkPhysicalDevice)
                              _VkPhysicalDevice))
-          (free phys-devices-ptr)
           ; return new state with selected physical device
           (hash-set state 'phys-dev phys-dev-ptr))))))
 
