@@ -43,7 +43,7 @@ VULKAN INSTANCE SET-UP
 ; make-window-ptr initializes sdl and creates a window with vulkan support
 (define (make-window-ptr)
   (begin (SDL_Init 'SDL_INIT_EVERYTHING)
-         (display "Initialized SDL2.\n")
+         (display (format "Initialized SDL2.~n"))
          (SDL_CreateWindow "Chowder"
                            0 0 ;window pos
                            (get-config "vfx-width")
@@ -56,7 +56,7 @@ VULKAN INSTANCE SET-UP
 (define (make-sdl2-window-info)
   (let ([window-ptr (make-window-ptr)]
         [extcount-ptr (A-uint32)])
-    (display "Created SDL2 window.\n")
+    (display (format "Created SDL2 window.~n"))
     (cpointer-push-tag! extcount-ptr 'uint*)
     (SDL_Vulkan_GetInstanceExtensions window-ptr extcount-ptr #f)
     (let ([extnames-ptr (A*-string (ptr-ref extcount-ptr _uint32))])
@@ -114,21 +114,26 @@ VULKAN INSTANCE SET-UP
 (define (make-instance)
   (let* ([vkinst-ptr (A-VkInstance)]
          [state (make-inst-create-info)])
-    (unless (= VK_SUCCESS (vkCreateInstance (hash-ref state 'inst-create-info) #f vkinst-ptr))
-      (error 'vkCreateInstance "failed")) 
+    (let ([vkresult-createinst  (vkCreateInstance (hash-ref state 'inst-create-info) #f vkinst-ptr)])
+      (unless (= VK_SUCCESS vkresult-createinst)
+        (error 'vkCreateInstance "failed with code ~a: ~a" vkresult-createinst
+               (case vkresult-createinst
+                 [(VK_ERROR_OUT_OF_HOST_MEMORY) 'VK_ERROR_OUT_OF_HOST_MEMORY]
+                 [(VK_ERROR_OUT_OF_DEVICE_MEMORY) 'VK_ERROR_OUT_OF_DEVICE_MEMORY]
+                 [(VK_ERROR_INITIALIZATION_FAILED) 'VK_ERROR_INITIALIZATION_FAILED]
+                 [(VK_ERROR_LAYER_NOT_PRESENT) 'VK_ERROR_LAYER_NOT_PRESENT]
+                 [(VK_ERROR_EXTENSION_NOT_PRESENT) 'VK_ERROR_EXTENSION_NOT_PRESENT]
+                 [(VK_ERROR_INCOMPATIBLE_DRIVER) 'VK_ERROR_INCOMPATIBLE_DRIVER]
+                 [else 'SOMETHING_ELSE?]))))
     (cpointer-push-tag! vkinst-ptr 'VkInstance_T)
-    (display "Created Vulkan instance.\n")
     (hash-set state 'vkinst vkinst-ptr)))
 
 ; free in reverse order
 (define (free-instance instdata)
   (let ([vkinst (hash-ref instdata 'vkinst)])
     (vkDestroyInstance (ptr-ref (hash-ref instdata 'vkinst) _VkInstance) #f)
-    (display "Freed Vulkan instance.\n")
     (SDL_DestroyWindow (hash-ref instdata 'window))
-    (display "Freed SDL2 window.\n")
-    (SDL_Quit)
-    (display "Shutdown SDL2.\n")))
+    (SDL_Quit)))
 
 
 #|
@@ -148,11 +153,9 @@ PHYSICAL DEVICE SET-UP
     ; will not set to zero if devices are not found
     (ptr-set! devcount-ptr _uint32 0) 
     (vkEnumeratePhysicalDevices vkinstance devcount-ptr #f)
-    (display (format "Found ~a physical devices.\n" (ptr-ref devcount-ptr _uint32)))
     ; if there are no suitable devices, shut down
     (unless (positive? (ptr-ref devcount-ptr _uint32))
-      (begin (display "Found no suitable graphics cards. Shutting down.")
-             (free-instance state)))
+      (error "Found no suitable graphics cards. Shutting down."))
     (let* ([devcount (ptr-ref devcount-ptr _uint32)]
            [phys-devices-ptr (A*-VkPhysicalDevice devcount)])
       ; grabbing handles for each physical device
@@ -167,7 +170,7 @@ PHYSICAL DEVICE SET-UP
            (ptr-add phys-devices-props-ptr
                     iter-dev
                     _VkPhysicalDeviceProperties))
-          (display (format "Found physical device called: ~a.\n"
+          (display (format "Found physical device called: ~a.~n"
                            (get-device-name
                             (VkPhysicalDeviceProperties-deviceName 
                              (ptr-ref (ptr-add phys-devices-props-ptr
@@ -217,15 +220,14 @@ LOGICAL DEVICE AND QUEUE SET-UP
                                                    _VkDeviceQueueCreateInfo)
                                           _VkDeviceQueueCreateInfo))
                                 (qcounts (cdr qfamrange-lst)))))])
-    (display (format "Binding queues from ~a queue families.~n" qfamcount))
     (letrec ([qcounts-lst (qcounts (sequence->list (in-range qfamcount)))]
-             [queues-alloc (λ (qcounts-lst)
-                             (if (zero? (length qcounts-lst))
+             [queues-alloc (λ (qcount-lst)
+                             (if (zero? (length qcount-lst))
                                  '()
-                                 (cons (A*-VkQueue (car qcounts-lst))
-                                       (queues-alloc (cdr qcounts-lst)))))])
+                                 (cons (A-VkQueue)
+                                       (queues-alloc (cdr qcount-lst)))))])
       (display (format "Found ~a queues total.~n" (apply + qcounts-lst)))
-      (define queues (queues-alloc qcounts-lst))
+      (define queues (queues-alloc (sequence->list (in-range (apply + qcounts-lst)))))
       ; cannot bind queues to these pointers here.
       (values queues qcounts-lst)))) 
 
@@ -250,7 +252,7 @@ LOGICAL DEVICE AND QUEUE SET-UP
                                                          (cons 'graphics lst))
                                                lst)))))))])
     (let ([qf (flag-lst queue-flags)])
-      (display (format "Found a queue family with these flags: ~a \n" qf)) 
+      (display (format "Found a queue family with these flags: ~a ~n" qf)) 
       (if (and (member 'compute qf) (member 'graphics qf) (member 'transfer qf))
           4 ; versatile queue families have more queues
           (if (or (member 'compute qf) (member 'graphics qf) (member 'transfer qf))
@@ -270,15 +272,12 @@ LOGICAL DEVICE AND QUEUE SET-UP
     (let* ([queue-family-count (ptr-ref queue-family-count-ptr _uint32)]
            [queue-families-props-ptr (A*-VkQueueFamilyProperties queue-family-count)]
            ; queue create info structures allocated here
-           [queue-create-infos-ptr (A*-VkDeviceQueueCreateInfo queue-family-count)] ;saved in state
-           [queue-families-priorities-ptr (A*-float 4)]) ;saved in state
+           [queue-create-infos-ptr (A*-VkDeviceQueueCreateInfo queue-family-count)]) ;saved in state
       (vkGetPhysicalDeviceQueueFamilyProperties phys-dev
                                                 queue-family-count-ptr
                                                 queue-families-props-ptr)
       ; set up number of queues and priorities
       ; queue families have same priority, and none will have more than 4 queues
-      (for ([priorities-iter (in-range 4)])
-        (ptr-set! (ptr-add queue-families-priorities-ptr priorities-iter _float) _float 1.0))
       (for ([queue-fam-iter (in-range queue-family-count)])
         ; determine appropo queue count
         (let* ([q-flags
@@ -292,13 +291,10 @@ LOGICAL DEVICE AND QUEUE SET-UP
           (ptr-set! (ptr-add queue-create-infos-ptr queue-fam-iter _VkDeviceQueueCreateInfo)
                     _VkDeviceQueueCreateInfo
                     (gen-queue-create-info queue-fam-iter
-                                           count
-                                           queue-families-priorities-ptr))
-          (display (format "Queue family ~a with queue flag ~b will get ~a queues.\n"
+                                           count))
+          (display (format "Queue family ~a with queue flag ~b will get ~a queues.~n"
                            queue-fam-iter q-flags count))))
-        (let ([extcount (ptr-ref (hash-ref state 'extcount) _uint32)]
-              [extnames (hash-ref state 'extnames)]
-              [log-dev-create-info-ptr (A-VkDeviceCreateInfo)] ;saved in state
+        (let ([log-dev-create-info-ptr (A-VkDeviceCreateInfo)] ;saved in state
               [log-dev-ptr (A-VkDevice)]) ;saved in state 
           (cpointer-push-tag! queue-create-infos-ptr 'VkDeviceQueueCreateInfo)
           (cpointer-push-tag! phys-dev-feats-ptr 'VkPhysicalDeviceFeatures)
@@ -306,17 +302,48 @@ LOGICAL DEVICE AND QUEUE SET-UP
                     _VkDeviceCreateInfo
                     (gen-log-dev-create-info queue-family-count
                                              queue-create-infos-ptr
-                                             extcount
-                                             extnames
+                                             0
+                                             #f
                                              phys-dev-feats-ptr))
-          (vkCreateDevice phys-dev log-dev-create-info-ptr #f log-dev-ptr)
+          (let ([vkresult-createdev (vkCreateDevice phys-dev log-dev-create-info-ptr #f log-dev-ptr)])
+            (unless (= VK_SUCCESS vkresult-createdev)
+              (error 'vkCreateDevice "fails with code ~a: ~a."
+                     vkresult-createdev
+                     (case vkresult-createdev
+                       [(VK_ERROR_OUT_OF_HOST_MEMORY) 'VK_ERROR_OUT_OF_HOST_MEMORY]
+                       [(VK_ERROR_OUT_OF_DEVICE_MEMORY) 'VK_ERROR_OUT_OF_DEVICE_MEMORY]
+                       [(VK_ERROR_INITIALIZATION_FAILED) 'VK_ERROR_INITIALIZATION_FAILED]
+                       [(VK_ERROR_EXTENSION_NOT_PRESENT) 'VK_ERROR_EXTENSION_NOT_PRESENT]
+                       [(VK_ERROR_FEATURE_NOT_PRESENT) 'VK_ERROR_FEATURE_NOT_PRESENT]
+                       [(VK_ERROR_TOO_MANY_OBJECTS) 'VK_ERROR_TOO_MANY_OBJECTS]
+                       [(VK_ERROR_DEVICE_LOST) 'VK_ERROR_DEVICE_LOST]
+                       [else 'SOMETHING_ELSE?]))))
+          (cpointer-push-tag! log-dev-ptr 'VkDevice_T)
           ; queues are presently allocated but not assigned
           (define-values (queues qcounts) (extract-queues (ptr-ref log-dev-create-info-ptr
                                                                    _VkDeviceCreateInfo)))
+          
+          (for ([q-binding-args
+                 (for/list ([q-ref (for*/list ([qfam-iter (in-range (length qcounts))]
+                                               [q-iter (in-range (list-ref qcounts qfam-iter))])
+                                     (cons qfam-iter (cons q-iter '())))]
+                            [q queues])
+                   (cons q q-ref))])
+            (vkGetDeviceQueue (ptr-ref log-dev-ptr _VkDevice)
+                              (list-ref q-binding-args 1)
+                              (list-ref q-binding-args 2)
+                              (list-ref q-binding-args 0)))
+
+          ;vkGetDeviceQueue is causing a segmentation fault
+          ; v pointers do point to allocated memory, can be assigned to without fault
+          ; v pointer in racket list behaves same as pointer without
+          ; ? calling display before calling vkGetDeviceQueue causes hang instead of segfault
+          ; o is queue create infos correct?
+          ; o is logical device properly created?? NOPE!
+          
           (hash-union state
                       (hash 'log-dev log-dev-ptr
                             'log-dev-create-info log-dev-create-info-ptr
-                            'qfam-priority queue-families-priorities-ptr
                             'qfam-create-info queue-create-infos-ptr
                             'phys-dev-feats phys-dev-feats-ptr
                             'qfam-count queue-family-count-ptr

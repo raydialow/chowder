@@ -20,7 +20,8 @@
 |#
 
 (require ffi/unsafe
-         vulkan/unsafe)
+         vulkan/unsafe
+         "allocators.rkt")
 
 (provide (all-defined-out))
 
@@ -38,6 +39,12 @@ IMMUTABLE HASH UTILS
                           (remover (hash-remove hash (car lst)) (cdr lst))))])
     (remover hash keys)))
 
+#|
+
+FORIEGN CHAR ARRAY UTILS
+
+|#
+
 ; makes string from extension name char array
 (define (printable-carray carray)
   (string-trim 
@@ -47,12 +54,6 @@ IMMUTABLE HASH UTILS
                      (if (char-graphic? ch)
                          ch
                          #\space))))))
-
-#|
-
-FORIEGN CHAR ARRAY UTILS
-
-|#
 
 ; makes string from device name char array
 (define (get-device-name carray)
@@ -78,17 +79,23 @@ VULKAN STRUCTURE UTILS
                           (VK_MAKE_VERSION 0 0 0) ;applicationVersion
                           #"Chowder" ;pEngineName
                           (VK_MAKE_VERSION 0 0 0) ;engineVersion
-                          (VK_MAKE_VERSION 1 2 0) ;apiVersion
+                          (VK_MAKE_VERSION 1 0 0) ;apiVersion
                           ))
 
+(define (queue-priority-arr-ptr length)
+  (let ([ret (A*-float length)])
+    (for ([iter (in-range length)])
+      (ptr-set! (ptr-add ret iter _float) _float 1.0))
+    ret))
+
 ; queue create info structure
-(define (gen-queue-create-info index count priority)
+(define (gen-queue-create-info index count)
   (make-VkDeviceQueueCreateInfo VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO
                                 #f ;pNext
                                 0 ;flags
                                 index
                                 count
-                                priority))
+                                (queue-priority-arr-ptr count)))
 
 ; device create info structure
 (define (gen-log-dev-create-info q-create-info-count
@@ -107,8 +114,3 @@ VULKAN STRUCTURE UTILS
                            ext-names-arr-ptr
                            dev-feats-ptr))
 
-#|
-
-VULKAN 
-
-|#

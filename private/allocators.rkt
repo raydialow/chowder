@@ -23,6 +23,7 @@
 (define (A-float) ((A _float)))
 (define (A-VkDeviceCreateInfo) ((A _VkDeviceCreateInfo)))
 (define (A-VkDevice) ((A _VkDevice)))
+(define (A-VkQueue) ((A _VkQueue)))
 
 ; array allocators
 (define (A* ctype length) ((allocator D)
