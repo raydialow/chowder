@@ -33,3 +33,11 @@
 (define (A*-VkPhysicalDeviceProperties length) ((A* _VkPhysicalDeviceProperties length)))
 (define (A*-VkQueueFamilyProperties length) ((A* _VkQueueFamilyProperties length)))
 (define (A*-VkDeviceQueueCreateInfo length) ((A* _VkDeviceQueueCreateInfo length)))
+(define (A*-VkQueue length) ((A* _VkQueue length)))
+(define (A*-float length) ((A* _float length)))
+(define (A*-VkLayerProperties length) ((A* _VkLayerProperties length)))
+(define (A*-vkextname length) ((A* (_array _char VK_MAX_EXTENSION_NAME_SIZE) length)))
+
+; initializing allocators
+; produces a ptr to a uint32 containing zero
+(define (zero) (let ([ret (A-uint32)]) (ptr-set! ret _uint32 0) ret))
