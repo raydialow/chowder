@@ -45,72 +45,20 @@ FORIEGN CHAR ARRAY UTILS
 
 |#
 
-; makes string from extension name char array
-(define (printable-carray carray)
+; returns a char array to string procedure for char arrays of size
+(define ((carray->string size) carray)
   (string-trim 
-   (build-string VK_MAX_EXTENSION_NAME_SIZE
+   (build-string size
                  (λ (n)
                    (let ([ch (integer->char (array-ref carray n))])
                      (if (char-graphic? ch)
                          ch
                          #\space))))))
+
+; makes string from extension name char array
+(define get-extension-name
+  (carray->string VK_MAX_EXTENSION_NAME_SIZE))
 
 ; makes string from device name char array
-(define (get-device-name carray)
-  (string-trim 
-   (build-string VK_MAX_PHYSICAL_DEVICE_NAME_SIZE
-                 (λ (n)
-                   (let ([ch (integer->char (array-ref carray n))])
-                     (if (char-graphic? ch)
-                         ch
-                         #\space))))))
-
-#|
-
-VULKAN STRUCTURE UTILS
-
-|#
-
-; application information is defined here, returns a VkApplicationInfo cstruct
-(define (make-application-info)
-  (make-VkApplicationInfo VK_STRUCTURE_TYPE_APPLICATION_INFO
-                          #f ;pNext
-                          #"Chowder SDK" ;pApplicationName
-                          (VK_MAKE_VERSION 0 0 0) ;applicationVersion
-                          #"Chowder" ;pEngineName
-                          (VK_MAKE_VERSION 0 0 0) ;engineVersion
-                          (VK_MAKE_VERSION 1 0 0) ;apiVersion
-                          ))
-
-(define (queue-priority-arr-ptr length)
-  (let ([ret (A*-float length)])
-    (for ([iter (in-range length)])
-      (ptr-set! (ptr-add ret iter _float) _float 1.0))
-    ret))
-
-; queue create info structure
-(define (gen-queue-create-info index count)
-  (make-VkDeviceQueueCreateInfo VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO
-                                #f ;pNext
-                                0 ;flags
-                                index
-                                count
-                                (queue-priority-arr-ptr count)))
-
-; device create info structure
-(define (gen-log-dev-create-info q-create-info-count
-                                 q-create-info-arr-ptr
-                                 ext-count
-                                 ext-names-arr-ptr
-                                 dev-feats-ptr)
-  (make-VkDeviceCreateInfo VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO
-                           #f
-                           0
-                           q-create-info-count
-                           q-create-info-arr-ptr
-                           0
-                           #f
-                           ext-count
-                           ext-names-arr-ptr
-                           dev-feats-ptr))
-
+(define get-device-name
+  (carray->string VK_MAX_PHYSICAL_DEVICE_NAME_SIZE))

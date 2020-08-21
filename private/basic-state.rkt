@@ -19,8 +19,9 @@
 
 |#
 
-;;; IMPORTANT!!!
-;;; Attempting to enable validation layers causes vkCreateInstance to hang without error! 
+; todo: validation layers and device extensions
+
+(require racket/trace)
 
 (require racket/hash
          ffi/unsafe
@@ -34,6 +35,56 @@
          "config.rkt"
          "utilities.rkt")
 
+(provide setup-vulkan shutdown-vulkan)
+
+#|
+
+VULKAN STRUCTURE UTILS
+
+|#
+
+; application information is defined here, returns a VkApplicationInfo cstruct
+(trace-define (make-application-info)
+  (make-VkApplicationInfo VK_STRUCTURE_TYPE_APPLICATION_INFO
+                          #f ;pNext
+                          #"Chowder SDK" ;pApplicationName
+                          (VK_MAKE_VERSION 0 0 0) ;applicationVersion
+                          #"Chowder" ;pEngineName
+                          (VK_MAKE_VERSION 0 0 0) ;engineVersion
+                          (VK_MAKE_VERSION 1 1 0) ;apiVersion
+                          ))
+
+(trace-define (queue-priority-arr-ptr length)
+  (let ([ret (A*-float length)])
+    (for ([iter (in-range length)])
+      (ptr-set! (ptr-add ret iter _float) _float 1.0))
+    ret))
+
+; queue create info structure
+(trace-define (gen-queue-create-info index count)
+  (make-VkDeviceQueueCreateInfo VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO
+                                #f ;pNext
+                                0 ;flags
+                                index
+                                count
+                                (queue-priority-arr-ptr count)))
+
+; device create info structure
+; TODO, accept device validation layers
+(trace-define (gen-log-dev-create-info q-create-info-count
+                                 q-create-info-arr-ptr
+                                 dev-feats-ptr)
+  (make-VkDeviceCreateInfo VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO
+                           #f
+                           0
+                           q-create-info-count
+                           q-create-info-arr-ptr
+                           0
+                           #f
+                           0
+                           #f
+                           dev-feats-ptr))
+
 #|
 
 VULKAN INSTANCE SET-UP 
@@ -41,9 +92,8 @@ VULKAN INSTANCE SET-UP
 |#
 
 ; make-window-ptr initializes sdl and creates a window with vulkan support
-(define (make-window-ptr)
+(trace-define (make-window-ptr)
   (begin (SDL_Init 'SDL_INIT_EVERYTHING)
-         (display (format "Initialized SDL2.~n"))
          (SDL_CreateWindow "Chowder"
                            0 0 ;window pos
                            (get-config "vfx-width")
@@ -53,10 +103,9 @@ VULKAN INSTANCE SET-UP
                                'SDL_WINDOW_VULKAN))))
 
 ; composes make-window-ptr to get vulkan extension count and names
-(define (make-sdl2-window-info)
+(trace-define (make-sdl2-window-info)
   (let ([window-ptr (make-window-ptr)]
         [extcount-ptr (A-uint32)])
-    (display (format "Created SDL2 window.~n"))
     (cpointer-push-tag! extcount-ptr 'uint*)
     (SDL_Vulkan_GetInstanceExtensions window-ptr extcount-ptr #f)
     (let ([extnames-ptr (A*-string (ptr-ref extcount-ptr _uint32))])
@@ -66,14 +115,12 @@ VULKAN INSTANCE SET-UP
             'extnames extnames-ptr))))
 
 ; gathers information on available validation layers if validation layers are enabled
-; does not work. see note on line 23
-(define (make-validation-info enabled?)
+(trace-define (make-validation-info enabled?)
   (if (not enabled?)
       (hash 'vlayers-count (zero)
             'vlayers-names #f)
     (let ([vlayers-count-ptr (A-uint32)])
       (vkEnumerateInstanceLayerProperties vlayers-count-ptr #f)
-      (display (format "Found ~a validation layers.~n" (ptr-ref vlayers-count-ptr _uint32)))
       (let ([vlayers-props-ptr (A*-VkLayerProperties (ptr-ref vlayers-count-ptr _uint32))]
             [vlayers-names-ptr (A*-vkextname (ptr-ref vlayers-count-ptr _uint32))])
         (vkEnumerateInstanceLayerProperties vlayers-count-ptr vlayers-props-ptr)
@@ -85,16 +132,14 @@ VULKAN INSTANCE SET-UP
                                                                   vlayer-iter
                                                                   _VkLayerProperties)
                                                                  _VkLayerProperties)))])
-            (display (format "Registering validation layer ~a~n"
-                             (printable-carray (ptr-ref vkextname-ptr vkextname-t))))
             (memcpy (ptr-add vlayers-names-ptr vlayer-iter vkextname-t)
                     vkextname-ptr VK_MAX_EXTENSION_NAME_SIZE)))
+        ;;; TODO separate instance layers from device layers
         (hash 'vlayers-count vlayers-count-ptr
-              'vlayers-props vlayers-props-ptr
               'vlayers-names vlayers-names-ptr)))))
 
 ; composing procedures above, adds a VkInstanceCreateInfo cstruct to state
-(define (make-inst-create-info)
+(trace-define (make-inst-create-info)
   (let ([state (hash-union (hash-set (make-sdl2-window-info) 'appinfo (make-application-info))
                            (make-validation-info (get-config "vk-validation")))])
     (hash-set state 'inst-create-info
@@ -111,7 +156,7 @@ VULKAN INSTANCE SET-UP
   
 
 ; composes procedures above to add a vkinstance to the state
-(define (make-instance)
+(trace-define (make-instance)
   (let* ([vkinst-ptr (A-VkInstance)]
          [state (make-inst-create-info)])
     (let ([vkresult-createinst  (vkCreateInstance (hash-ref state 'inst-create-info) #f vkinst-ptr)])
@@ -129,7 +174,7 @@ VULKAN INSTANCE SET-UP
     (hash-set state 'vkinst vkinst-ptr)))
 
 ; free in reverse order
-(define (free-instance instdata)
+(trace-define (free-instance instdata)
   (let ([vkinst (hash-ref instdata 'vkinst)])
     (vkDestroyInstance (ptr-ref (hash-ref instdata 'vkinst) _VkInstance) #f)
     (SDL_DestroyWindow (hash-ref instdata 'window))
@@ -145,7 +190,7 @@ PHYSICAL DEVICE SET-UP
 |#
 
 ; Grabs one physical device. The first one by default.
-(define (get-phys-dev)
+(trace-define (get-phys-dev)
   (let* ([state (make-instance)]
          [vkinstance (ptr-ref (hash-ref state 'vkinst) _VkInstance)]
          [devcount-ptr (A-uint32)])
@@ -169,14 +214,7 @@ PHYSICAL DEVICE SET-UP
                              _VkPhysicalDevice) _VkPhysicalDevice)
            (ptr-add phys-devices-props-ptr
                     iter-dev
-                    _VkPhysicalDeviceProperties))
-          (display (format "Found physical device called: ~a.~n"
-                           (get-device-name
-                            (VkPhysicalDeviceProperties-deviceName 
-                             (ptr-ref (ptr-add phys-devices-props-ptr
-                                               iter-dev
-                                               _VkPhysicalDeviceProperties)
-                                      _VkPhysicalDeviceProperties))))))
+                    _VkPhysicalDeviceProperties)))
         ; if this is a different list than stored in config, apply new config
         (let ([vfx-dev-avail
                (build-list (ptr-ref devcount-ptr _uint32)
@@ -208,7 +246,7 @@ LOGICAL DEVICE AND QUEUE SET-UP
 
 |#
 
-(define (extract-queues log-dev-create-info)
+(trace-define (extract-queues log-dev-create-info)
   (letrec ([qfamcount (VkDeviceCreateInfo-queueCreateInfoCount log-dev-create-info)]
            [qfamcrinfosptr (VkDeviceCreateInfo-pQueueCreateInfos log-dev-create-info)]
            [qcounts (λ (qfamrange-lst)
@@ -226,12 +264,11 @@ LOGICAL DEVICE AND QUEUE SET-UP
                                  '()
                                  (cons (A-VkQueue)
                                        (queues-alloc (cdr qcount-lst)))))])
-      (display (format "Found ~a queues total.~n" (apply + qcounts-lst)))
       (define queues (queues-alloc (sequence->list (in-range (apply + qcounts-lst)))))
       ; cannot bind queues to these pointers here.
       (values queues qcounts-lst)))) 
 
-(define (q-count queue-flags)
+(trace-define (q-count queue-flags)
   (letrec ([flag-lst (λ (q-flags [lst '()])
                        (if (zero? queue-flags)
                            lst
@@ -252,15 +289,14 @@ LOGICAL DEVICE AND QUEUE SET-UP
                                                          (cons 'graphics lst))
                                                lst)))))))])
     (let ([qf (flag-lst queue-flags)])
-      (display (format "Found a queue family with these flags: ~a ~n" qf)) 
-      (if (and (member 'compute qf) (member 'graphics qf) (member 'transfer qf))
+      (if (and (member 'compute qf) (member 'graphics qf))
           4 ; versatile queue families have more queues
-          (if (or (member 'compute qf) (member 'graphics qf) (member 'transfer qf))
+          (if (or (member 'compute qf) (member 'graphics qf))
               2 ; exclusive queue families have fewer queues
-              0))))) ; if queue family doesn't have compute graphics or transfer, no queues
+              1))))) ; if queue family doesn't have compute graphics or transfer, no queues
 
 ; composes the above to add a physical device and handles to its queues to the state
-(define (make-log-dev)
+(trace-define (make-log-dev)
   ; grab number of queue families and supported features on selected device 
   (let* ([state (get-phys-dev)]
          [phys-dev (ptr-ref (hash-ref state 'phys-dev) _VkPhysicalDevice)]
@@ -290,10 +326,7 @@ LOGICAL DEVICE AND QUEUE SET-UP
           ; create queue create info structure for queue family
           (ptr-set! (ptr-add queue-create-infos-ptr queue-fam-iter _VkDeviceQueueCreateInfo)
                     _VkDeviceQueueCreateInfo
-                    (gen-queue-create-info queue-fam-iter
-                                           count))
-          (display (format "Queue family ~a with queue flag ~b will get ~a queues.~n"
-                           queue-fam-iter q-flags count))))
+                    (gen-queue-create-info queue-fam-iter count))))
         (let ([log-dev-create-info-ptr (A-VkDeviceCreateInfo)] ;saved in state
               [log-dev-ptr (A-VkDevice)]) ;saved in state 
           (cpointer-push-tag! queue-create-infos-ptr 'VkDeviceQueueCreateInfo)
@@ -302,8 +335,6 @@ LOGICAL DEVICE AND QUEUE SET-UP
                     _VkDeviceCreateInfo
                     (gen-log-dev-create-info queue-family-count
                                              queue-create-infos-ptr
-                                             0
-                                             #f
                                              phys-dev-feats-ptr))
           (let ([vkresult-createdev (vkCreateDevice phys-dev log-dev-create-info-ptr #f log-dev-ptr)])
             (unless (= VK_SUCCESS vkresult-createdev)
@@ -322,7 +353,6 @@ LOGICAL DEVICE AND QUEUE SET-UP
           ; queues are presently allocated but not assigned
           (define-values (queues qcounts) (extract-queues (ptr-ref log-dev-create-info-ptr
                                                                    _VkDeviceCreateInfo)))
-          
           (for ([q-binding-args
                  (for/list ([q-ref (for*/list ([qfam-iter (in-range (length qcounts))]
                                                [q-iter (in-range (list-ref qcounts qfam-iter))])
@@ -333,14 +363,6 @@ LOGICAL DEVICE AND QUEUE SET-UP
                               (list-ref q-binding-args 1)
                               (list-ref q-binding-args 2)
                               (list-ref q-binding-args 0)))
-
-          ;vkGetDeviceQueue is causing a segmentation fault
-          ; v pointers do point to allocated memory, can be assigned to without fault
-          ; v pointer in racket list behaves same as pointer without
-          ; ? calling display before calling vkGetDeviceQueue causes hang instead of segfault
-          ; o is queue create infos correct?
-          ; o is logical device properly created?? NOPE!
-          
           (hash-union state
                       (hash 'log-dev log-dev-ptr
                             'log-dev-create-info log-dev-create-info-ptr
@@ -350,5 +372,11 @@ LOGICAL DEVICE AND QUEUE SET-UP
                             'queues queues
                             'qcounts qcounts))))))
 
-; test
-(free-instance (make-log-dev))
+#|
+
+provided set-up and shutdown procedure
+
+|#
+
+(trace-define (setup-vulkan) (make-log-dev))
+(trace-define (shutdown-vulkan state) (free-instance state))
