@@ -5,23 +5,20 @@
     Copyright 2020 June Sage Rana
 
     This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
+    it under the terms of the fuck around and find out license v0.1 as
+    published in this program.
 
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. 
 
-    You should have received a copy of the GNU General Public License
-    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+    You should have received a copy of the the fuck around and find out
+    license v0.1 along with this program.  If not, see
+    <https://paste.sr.ht/blob/d581b82a39d6f36f2f4c541785cee349b2549699>.
 
 |#
 
 ; todo: validation layers and device extensions
-
-(require racket/trace)
 
 (require racket/hash
          ffi/unsafe
@@ -44,7 +41,7 @@ VULKAN STRUCTURE UTILS
 |#
 
 ; application information is defined here, returns a VkApplicationInfo cstruct
-(trace-define (make-application-info)
+(define (make-application-info)
   (make-VkApplicationInfo VK_STRUCTURE_TYPE_APPLICATION_INFO
                           #f ;pNext
                           #"Chowder SDK" ;pApplicationName
@@ -54,14 +51,14 @@ VULKAN STRUCTURE UTILS
                           (VK_MAKE_VERSION 1 1 0) ;apiVersion
                           ))
 
-(trace-define (queue-priority-arr-ptr length)
+(define (queue-priority-arr-ptr length)
   (let ([ret (A*-float length)])
     (for ([iter (in-range length)])
       (ptr-set! (ptr-add ret iter _float) _float 1.0))
     ret))
 
 ; queue create info structure
-(trace-define (gen-queue-create-info index count)
+(define (gen-queue-create-info index count)
   (make-VkDeviceQueueCreateInfo VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO
                                 #f ;pNext
                                 0 ;flags
@@ -71,7 +68,7 @@ VULKAN STRUCTURE UTILS
 
 ; device create info structure
 ; TODO, accept device validation layers
-(trace-define (gen-log-dev-create-info q-create-info-count
+(define (gen-log-dev-create-info q-create-info-count
                                  q-create-info-arr-ptr
                                  dev-feats-ptr)
   (make-VkDeviceCreateInfo VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO
@@ -92,7 +89,7 @@ VULKAN INSTANCE SET-UP
 |#
 
 ; make-window-ptr initializes sdl and creates a window with vulkan support
-(trace-define (make-window-ptr)
+(define (make-window-ptr)
   (begin (SDL_Init 'SDL_INIT_EVERYTHING)
          (SDL_CreateWindow "Chowder"
                            0 0 ;window pos
@@ -103,7 +100,7 @@ VULKAN INSTANCE SET-UP
                                'SDL_WINDOW_VULKAN))))
 
 ; composes make-window-ptr to get vulkan extension count and names
-(trace-define (make-sdl2-window-info)
+(define (make-sdl2-window-info)
   (let ([window-ptr (make-window-ptr)]
         [extcount-ptr (A-uint32)])
     (cpointer-push-tag! extcount-ptr 'uint*)
@@ -115,7 +112,7 @@ VULKAN INSTANCE SET-UP
             'extnames extnames-ptr))))
 
 ; gathers information on available validation layers if validation layers are enabled
-(trace-define (make-validation-info enabled?)
+(define (make-validation-info enabled?)
   (if (not enabled?)
       (hash 'vlayers-count (zero)
             'vlayers-names #f)
@@ -139,7 +136,7 @@ VULKAN INSTANCE SET-UP
               'vlayers-names vlayers-names-ptr)))))
 
 ; composing procedures above, adds a VkInstanceCreateInfo cstruct to state
-(trace-define (make-inst-create-info)
+(define (make-inst-create-info)
   (let ([state (hash-union (hash-set (make-sdl2-window-info) 'appinfo (make-application-info))
                            (make-validation-info (get-config "vk-validation")))])
     (hash-set state 'inst-create-info
@@ -156,7 +153,7 @@ VULKAN INSTANCE SET-UP
   
 
 ; composes procedures above to add a vkinstance to the state
-(trace-define (make-instance)
+(define (make-instance)
   (let* ([vkinst-ptr (A-VkInstance)]
          [state (make-inst-create-info)])
     (let ([vkresult-createinst  (vkCreateInstance (hash-ref state 'inst-create-info) #f vkinst-ptr)])
@@ -174,7 +171,7 @@ VULKAN INSTANCE SET-UP
     (hash-set state 'vkinst vkinst-ptr)))
 
 ; free in reverse order
-(trace-define (free-instance instdata)
+(define (free-instance instdata)
   (let ([vkinst (hash-ref instdata 'vkinst)])
     (vkDestroyInstance (ptr-ref (hash-ref instdata 'vkinst) _VkInstance) #f)
     (SDL_DestroyWindow (hash-ref instdata 'window))
@@ -190,7 +187,7 @@ PHYSICAL DEVICE SET-UP
 |#
 
 ; Grabs one physical device. The first one by default.
-(trace-define (get-phys-dev)
+(define (get-phys-dev)
   (let* ([state (make-instance)]
          [vkinstance (ptr-ref (hash-ref state 'vkinst) _VkInstance)]
          [devcount-ptr (A-uint32)])
@@ -246,7 +243,7 @@ LOGICAL DEVICE AND QUEUE SET-UP
 
 |#
 
-(trace-define (extract-queues log-dev-create-info)
+(define (extract-queues log-dev-create-info)
   (letrec ([qfamcount (VkDeviceCreateInfo-queueCreateInfoCount log-dev-create-info)]
            [qfamcrinfosptr (VkDeviceCreateInfo-pQueueCreateInfos log-dev-create-info)]
            [qcounts (λ (qfamrange-lst)
@@ -268,7 +265,7 @@ LOGICAL DEVICE AND QUEUE SET-UP
       ; cannot bind queues to these pointers here.
       (values queues qcounts-lst)))) 
 
-(trace-define (q-count queue-flags)
+(define (q-count queue-flags)
   (letrec ([flag-lst (λ (q-flags [lst '()])
                        (if (zero? queue-flags)
                            lst
@@ -296,7 +293,7 @@ LOGICAL DEVICE AND QUEUE SET-UP
               1))))) ; if queue family doesn't have compute graphics or transfer, no queues
 
 ; composes the above to add a physical device and handles to its queues to the state
-(trace-define (make-log-dev)
+(define (make-log-dev)
   ; grab number of queue families and supported features on selected device 
   (let* ([state (get-phys-dev)]
          [phys-dev (ptr-ref (hash-ref state 'phys-dev) _VkPhysicalDevice)]
@@ -378,5 +375,5 @@ provided set-up and shutdown procedure
 
 |#
 
-(trace-define (setup-vulkan) (make-log-dev))
-(trace-define (shutdown-vulkan state) (free-instance state))
+(define (setup-vulkan) (make-log-dev))
+(define (shutdown-vulkan state) (free-instance state))
