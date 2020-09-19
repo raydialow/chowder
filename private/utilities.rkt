@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 #|
 
@@ -20,6 +20,7 @@
 
 (require ffi/unsafe
          vulkan/unsafe
+         racket/string
          "allocators.rkt")
 
 (provide (all-defined-out))

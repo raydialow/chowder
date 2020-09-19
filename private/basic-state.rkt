@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 #|
 
@@ -21,6 +21,7 @@
 ; todo: validation layers and device extensions
 
 (require racket/hash
+         racket/sequence
          ffi/unsafe
          vulkan/unsafe
          ; require custom sdl2 to correct arity issue in
@@ -48,8 +49,7 @@ VULKAN STRUCTURE UTILS
                           (VK_MAKE_VERSION 0 0 0) ;applicationVersion
                           #"Chowder" ;pEngineName
                           (VK_MAKE_VERSION 0 0 0) ;engineVersion
-                          (VK_MAKE_VERSION 1 1 0) ;apiVersion
-                          ))
+                          (VK_MAKE_VERSION 1 1 0))) ;apiVersion
 
 (define (queue-priority-arr-ptr length)
   (let ([ret (A*-float length)])
@@ -114,7 +114,7 @@ VULKAN INSTANCE SET-UP
 ; gathers information on available validation layers if validation layers are enabled
 (define (make-validation-info enabled?)
   (if (not enabled?)
-      (hash 'vlayers-count (zero)
+      (hash 'vlayers-count vkzero
             'vlayers-names #f)
     (let ([vlayers-count-ptr (A-uint32)])
       (vkEnumerateInstanceLayerProperties vlayers-count-ptr #f)
