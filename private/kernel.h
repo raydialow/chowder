@@ -21,9 +21,9 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <vulkan/vulkan.h>
-#include <SDL/SDL.h>
-#include <SDL/SDL_video.h>
-#include <SDL/SDL_vulkan.h>
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_video.h>
+#include <SDL2/SDL_vulkan.h>
 
 const uint32_t chowder_version = VK_MAKE_VERSION(0, 0, 0);
 
@@ -63,32 +63,59 @@ VkInstanceCreateInfo mk_instance_create_info(VkApplicationInfo application_info,
   char** extension_names;
   SDL_Vulkan_GetInstanceExtensions(window, &extension_count, extension_names);
 
-  uint32_t vlayers_count = 0;
-  char ** vlayers_names = NULL;
-  if(validation_layers == true) {
+  /* VALIDATION LAYERS UNUSED...
+  uint32_t vlayers_count;
+  validation_layers == true ?
 	//do something else
+	vlayers_count = 0;
+  } else {
+	vlayers_count = 0;
   }
+  vlayers_count > 0 ?
+	char* vlayers_names[vlayers_count] :
+	char* vlayers_names = NULL;
+  if(vlayers_count > 0) {
+	//do something else
+	vlayers_names = NULL;
+  }
+  */
 
   ret.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   ret.pNext = NULL;
   ret.flags = 0;
-  ret.pApplicationInfo = application_info;
-  ret.enabledLayerCount = vlayers_count;
-  ret.ppEnabledLayerNames = vlayers_names;
+  ret.pApplicationInfo = &application_info;
+  ret.enabledLayerCount = 0;
+  ret.ppEnabledLayerNames = NULL;
   ret.enabledExtensionCount = extension_count;
   ret.ppEnabledExtensionNames = extension_names;
 
   return ret;
 }
 
-VkInstance mk-instance(VkInstanceCreateInfo instance_create_info)
+VkInstance mk_instance(VkInstanceCreateInfo instance_create_info)
 {
   VkInstance ret;
-  assert(vkCreateInstance(instance_create_info, NULL, &ret) == VK_SUCCESS);
+  assert(vkCreateInstance(&instance_create_info, NULL, &ret) == VK_SUCCESS);
   return ret;
 }
 
-void rm-instance(VkInstance instance, SDL_Window* window)
+VkPhysicalDevice get_physical_device(VkInstance instance)
+{
+  uint32_t physical_device_count;
+  vkEnumeratePhysicalDevices(instance, &physical_device_count, NULL);
+  assert(physical_device_count > 0);
+  VkPhysicalDevice physical_devices[physical_device_count];
+  vkEnumeratePhysicalDevices(instance, &physical_device_count, physical_devices);
+  // query physical devices if there are multiple. if there is only one, return it.
+  if(physical_device_count == 1) {
+	return physical_devices[0];
+  } else {
+	// query...
+	return physical_devices[0];
+  }
+}
+
+void rm_instance(VkInstance instance, SDL_Window* window)
 {
   vkDestroyInstance(instance, NULL);
   SDL_DestroyWindow(window);
