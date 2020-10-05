@@ -1,0 +1,6 @@
+vfx-width: 800
+vfx-dev-avail: [GeForce GTX 970]
+vfx-dev-sel: 0
+vfx-fullscreen: false
+vfx-height: 600
+vk-validation: false
