@@ -28,9 +28,18 @@
 #include <SDL2/SDL_vulkan.h>
 #endif
 
-const uint32_t chowder_version = VK_MAKE_VERSION(0, 0, 0);
+typedef uint32_t vkint;
 
-VkApplicationInfo mk_application_info(uint32_t application_version)
+struct chowderQueues {
+  VkQueue flats_Q; // queue for 2d fx, particles, ui, etc.
+  VkQueue collision_Q; // queue for collisions and ray tracing comps, etc.
+  VkQueue geometry_Q; // queue for geometry ops and tesselation, etc.
+  VkQueue render_Q; // queue for shaders, raster, render, etc.
+} chowderQueues;
+
+const vkint chowder_version = VK_MAKE_VERSION(0, 0, 0);
+
+VkApplicationInfo mk_application_info(vkint application_version)
 {
   VkApplicationInfo ret;
   ret.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -43,10 +52,10 @@ VkApplicationInfo mk_application_info(uint32_t application_version)
   return ret;
 }
 
-SDL_Window* mk_window(uint32_t width, uint32_t height, bool fullscreen)
+SDL_Window* mk_window(vkint width, vkint height, bool fullscreen)
 {
   SDL_Init(SDL_INIT_EVERYTHING);
-  uint32_t flags;
+  vkint flags;
   if(fullscreen == true) {
 	flags = SDL_WINDOW_VULKAN|SDL_WINDOW_FULLSCREEN;
   } else {
@@ -61,25 +70,10 @@ VkInstanceCreateInfo mk_instance_create_info(VkApplicationInfo application_info,
 {
   VkInstanceCreateInfo ret;
 
-  uint32_t extension_count;
+  vkint extension_count;
   SDL_Vulkan_GetInstanceExtensions(window, &extension_count, NULL);
   const char** extension_names;
   SDL_Vulkan_GetInstanceExtensions(window, &extension_count, extension_names);
-
-  /* VALIDATION LAYERS UNUSED...
-  uint32_t vlayers_count;
-  if(validation_layers == true) {
-	//do something else
-	vlayers_count = 0;
-  } else {
-	vlayers_count = 0;
-  }
-  const char** vlayers_names;
-  if(vlayers_count > 0) {
-	//do something else
-	vlayers_names = NULL;
-  }
-  */
 
   ret.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   ret.pNext = NULL;
@@ -100,21 +94,38 @@ VkInstance mk_instance(VkInstanceCreateInfo instance_create_info)
   return ret;
 }
 
-VkPhysicalDevice get_physical_device(VkInstance instance)
+vkint getno_physical_devices(VkInstance instance)
 {
-  uint32_t physical_device_count;
+  vkint physical_device_count;
   vkEnumeratePhysicalDevices(instance, &physical_device_count, NULL);
-  assert(physical_device_count > 0);
+  return physical_device_count;
+}
+
+VkPhysicalDevice* get_physical_devices(VkInstance instance, vkint physical_device_count)
+{
+  assert(physical_device_count > 0); // error if there are no vulkan compatible devices
   VkPhysicalDevice physical_devices[physical_device_count];
   vkEnumeratePhysicalDevices(instance, &physical_device_count, physical_devices);
-  // query physical devices if there are multiple. if there is only one, return it.
-  if(physical_device_count == 1) {
-	return physical_devices[0];
-  } else {
-	// query...
-	return physical_devices[0];
-  }
+  return &physical_devices;
 }
+
+VkPhysicalDeviceProperties get_physical_device_props(VkPhysicalDevice physical_device)
+{
+  VkPhysicalDeviceProperties physical_device_properties;
+  vkGetPhysicalDeviceProperties(physical_device, &physical_device_properties);
+  return physical_device_properties;
+}
+
+// take physical device and create logical device with four compute/gfx/transfer queues
+// initialize chowderQueue structure with created queues
+
+// write vk convenience functions utilizing created queues
+
+// write SDL2 convenience functions utilizing: Joystick, Audio,... etc.
+
+// wire into scheme front end, utilize to build SDK
+
+// ??? Profit
 
 void rm_instance(VkInstance instance, SDL_Window* window)
 {
