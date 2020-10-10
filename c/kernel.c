@@ -31,20 +31,20 @@
 typedef uint32_t vkint;
 
 struct chowderQueues {
-  VkQueue flats_Q; // queue for 2d fx, particles, ui, etc.
-  VkQueue collision_Q; // queue for collisions and ray tracing comps, etc.
-  VkQueue geometry_Q; // queue for geometry ops and tesselation, etc.
-  VkQueue render_Q; // queue for shaders, raster, render, etc.
+  VkQueue q2D; // 2D queue for 2d fx, particles, ui, etc.
+  VkQueue qTC; // TraceCollision queue for collisions and ray tracing comps, etc.
+  VkQueue q3D; // 3D queue for geometry ops and tesselation, etc.
+  VkQueue qRP; // RenderPipelinequeue for shaders, raster, render, etc.
 } chowderQueues;
 
 const vkint chowder_version = VK_MAKE_VERSION(0, 0, 0);
 
-VkApplicationInfo mk_application_info(vkint application_version)
+VkApplicationInfo mk_application_info(const char* application_name, vkint application_version)
 {
   VkApplicationInfo ret;
   ret.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
   ret.pNext = NULL;
-  ret.pApplicationName = "Unnamed";
+  ret.pApplicationName = application_name;
   ret.applicationVersion = application_version;
   ret.pEngineName = "Chowder";
   ret.engineVersion = chowder_version;
@@ -116,8 +116,84 @@ VkPhysicalDeviceProperties get_physical_device_props(VkPhysicalDevice physical_d
   return physical_device_properties;
 }
 
-// take physical device and create logical device with four compute/gfx/transfer queues
-// initialize chowderQueue structure with created queues
+vkint get_physical_device_queue_family_count(VkPhysicalDevice physical_device)
+{
+  vkint ret;
+  vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &ret, NULL);
+  return ret;
+}
+
+VkDeviceCreateInfo mk_device_create_info(VkPhysicalDevice physical_device,
+													vkint queue_family_count)
+{
+  assert(queue_family_count > 0);
+  VkQueueFamilyProperties queue_family_props[queue_family_count];
+  vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queue_family_count, &queue_family_props);
+  
+  VkDeviceQueueCreateInfo device_queue_create_infos[1];
+  const float queue_priorities[] = {.5,.5,.5,.5};
+
+  device_queue_create_infos[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+  device_queue_create_infos[0].pNext = NULL;
+  device_queue_create_infos[0].flags = 0;
+  device_queue_create_infos[0].queueFamilyIndex = 0;
+  device_queue_create_infos[0].queueCount = 4;
+  device_queue_create_infos[0].pQueuePriorities = &queue_priorities;
+
+  bool queue_family_set = false;
+  
+  for(vkint iter = 0; iter < queue_family_count; iter += 1) {
+	vkint queue_flags = queue_family_props[iter].queueFlags;
+	vkint queue_count = queue_family_props[iter].queueCount;
+
+	if(queue_flags&VK_QUEUE_GRAPHICS_BIT
+	   && queue_flags&VK_QUEUE_COMPUTE_BIT
+	   && queue_flags&VK_QUEUE_TRANSFER_BIT
+	   && queue_count >= 4) {
+	  device_queue_create_infos[0].queueFamilyIndex = iter;
+	  queue_family_set = true;
+	  break;
+	}
+	
+  }
+
+  assert(queue_family_set);
+
+  VkPhysicalDeviceFeatures physical_device_features;
+  vkGetPhysicalDeviceFeatures(physical_device, &physical_device_features);
+  
+  VkDeviceCreateInfo ret;
+  ret.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  ret.pNext = NULL;
+  ret.flags = 0;
+  ret.queueCreateInfoCount = 1;
+  ret.pQueueCreateInfos = &device_queue_create_infos;
+  ret.enabledLayerCount = 0;
+  ret.ppEnabledLayerNames = NULL;
+  ret.enabledExtensionCount = 0;
+  ret.ppEnabledExtensionNames = NULL;
+  ret.pEnabledFeatures = &physical_device_features;
+  
+  return ret;
+}
+
+VkDevice mk_device(VkPhysicalDevice physical_device, VkDeviceCreateInfo device_create_info)
+{
+  VkDevice device;
+  vkCreateDevice(physical_device, &device_create_info, NULL, &device);
+
+  //set chowder queues
+  vkint queue_family_index = device_create_info.pQueueCreateInfos->queueFamilyIndex;
+
+  vkGetDeviceQueue(device, queue_family_index, 0, &chowderQueues.q2D);
+  vkGetDeviceQueue(device, queue_family_index, 1, &chowderQueues.qTC);
+  vkGetDeviceQueue(device, queue_family_index, 2, &chowderQueues.q3D);
+  vkGetDeviceQueue(device, queue_family_index, 3, &chowderQueues.qRP);
+  
+  return device;
+}
+
+// set-up discrete command pools for each queue ...
 
 // write vk convenience functions utilizing created queues
 
