@@ -1,11 +1,8 @@
 CC=gcc
-CFLAGS=-lSDL2 -lvulkan
+CFLAGS=`pkg-config --static --libs vulkan glfw3`
 
 kernel :
-	$(CC) c/kernel.c $(CFLAGS) -o c/kernel
+	$(CC) c/kernel.c $(CFLAGS) -Wall -o c/kernel
 
-chibi-scheme :
-	make -C chibi-scheme
-
-clean :
+clean-kernel :
 	rm c/kernel
