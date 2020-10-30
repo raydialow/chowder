@@ -18,8 +18,7 @@
  *
  */
 
-#ifndef _KRNL_INCLUDES_
-#define _KRNL_INCLUDES_
+#define _KRNL_PREPRO_
 #include <assert.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -27,7 +26,11 @@
 #include <stddef.h>
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
-#endif
+#define BUFFER_SIZE_X_SMALL 0x0100
+#define BUFFER_SIZE_SMALL   0x0400
+#define BUFFER_SIZE_MEDIUM  0x0800
+#define BUFFER_SIZE_LARGE   0x0c00
+#define BUFFER_SIZE_X_LARGE 0x1000
 
 /*
  * Typedefs
@@ -37,12 +40,24 @@ typedef uint32_t vkint;
 /*
  * Constants
  */
-const char* chowder_name        = "Chowder v0.0.0";
-const vkint chowder_version     = VK_MAKE_VERSION(0, 0, 0);
-const char* chowder_sdk_name    = "Chowder SDK v0.0.0";
-const vkint chowder_sdk_version = VK_MAKE_VERSION(0, 0, 0);
+const vkint chowder_version_major       = 0x0;
+const vkint chowder_version_minor       = 0x0;
+const vkint chowder_version_rev         = 0x0;
+const vkint innerlands_version_major    = 0x0;
+const vkint innerlands_version_minor    = 0x0;
+const vkint innerlands_version_rev      = 0x0;
 
-const float queue_priorities[4] = {.5,.5,.5,.5};
+const char* chowder_name        = "Chowder";
+const char* innerlands_name     = "Innerlands";
+const vkint chowder_version     = VK_MAKE_VERSION(chowder_version_major,
+                                                  chowder_version_minor,
+                                                  chowder_version_rev);
+const vkint innerlands_version  = VK_MAKE_VERSION(innerlands_version_major,
+                                                  innerlands_version_minor,
+                                                  innerlands_version_rev);
+
+const vkint queue_count = 4;
+const float queue_priorities[] = {.5,.5,.5,.5};
 
 /*
  * MAIN
@@ -58,6 +73,7 @@ int main()
     const char**                    extension_names;
     VkInstanceCreateInfo            instance_create_info;
     VkInstance                      instance;
+    VkSurfaceKHR                    surface;
     vkint                           physical_device_count;
     VkPhysicalDevice                physical_device;
     VkPhysicalDeviceProperties      physical_device_properties;
@@ -83,13 +99,13 @@ int main()
 
     application_info.sType                          = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     application_info.pNext                          = NULL;
-    application_info.pApplicationName               = chowder_sdk_name;
-    application_info.applicationVersion             = chowder_sdk_version;
+    application_info.pApplicationName               = innerlands_name;
+    application_info.applicationVersion             = innerlands_version;
     application_info.pEngineName                    = chowder_name;
     application_info.engineVersion                  = chowder_version;
     application_info.apiVersion                     = VK_API_VERSION_1_2;
 
-    window                                          = glfwCreateWindow(800, 600, chowder_sdk_name, NULL, NULL);
+    window                                          = glfwCreateWindow(800, 600, innerlands_name, NULL, NULL);
     extension_count                                 = 0;
     extension_names                                 = glfwGetRequiredInstanceExtensions(&extension_count);
 
@@ -103,6 +119,7 @@ int main()
     instance_create_info.ppEnabledExtensionNames    = extension_names;
 
     assert( vkCreateInstance(&instance_create_info, NULL, &instance) == VK_SUCCESS );
+    assert( glfwCreateWindowSurface(instance, window, NULL, &surface) == VK_SUCCESS);
     assert( vkEnumeratePhysicalDevices(instance, &physical_device_count, NULL) == VK_SUCCESS );
     assert( physical_device_count > 0 );
     VkPhysicalDevice physical_devices[physical_device_count];
@@ -118,15 +135,18 @@ int main()
     VkQueueFamilyProperties queue_family_props[queue_family_count];
     vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queue_family_count, &queue_family_props[0]); //void
 
-    /* Assure Queue Family has graphics, compute, and transfer bits set and can hold at least 4 queues. */
+    /* Assure Queue Family has graphics, compute, and transfer bits set, can hold at least 4 queues, and has surface support */
     queue_family_set = false;
     for(vkint iter = 0; iter < queue_family_count; iter += 1) {
+        vkint surface_support = 0;
         vkint queue_flags = queue_family_props[iter].queueFlags;
-        vkint queue_count = queue_family_props[iter].queueCount;
+        vkint queue_max = queue_family_props[iter].queueCount;
+        vkGetPhysicalDeviceSurfaceSupportKHR(physical_device, iter, surface, &surface_support);
         if(queue_flags&VK_QUEUE_GRAPHICS_BIT
            && queue_flags&VK_QUEUE_COMPUTE_BIT
            && queue_flags&VK_QUEUE_TRANSFER_BIT
-           && queue_count >= 4) {
+           && queue_max >= queue_count
+           && surface_support) {
             queue_family_index                      = iter;
             queue_family_set                        = true;
             break;
@@ -154,11 +174,29 @@ int main()
 
     assert( vkCreateDevice(physical_device, &device_create_info, NULL, &device) == VK_SUCCESS );
 
+/* TODO: Need a
+ * Swapchain,
+ * Imageviews,
+ * Graphics Pipeline,
+ * Framebuffers,
+ * Command Pool and Buffers,
+ * Render Loop,
+ * <AUDIO STUFF>,
+ * <CONTROLS STUFF>,
+ * <SCRIPTING STUFF>
+ */
+
+
     /*
      * Procedure
      */
+    printf("Started Vulkan instance using device %s with four queues on family index %u.\n",
+           physical_device_properties.deviceName,
+           queue_family_index);
+    vkDestroySurfaceKHR(instance, surface, NULL);
     vkDestroyInstance(instance, NULL);
     glfwDestroyWindow(window);
     glfwTerminate();
-    return 666;
+    puts("Terminated cleanly.\n");
+    return 0;
 }
