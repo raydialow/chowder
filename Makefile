@@ -2,7 +2,7 @@ CC=gcc
 CFLAGS=`pkg-config --static --libs vulkan glfw3`
 
 kernel :
-	$(CC) c/kernel.c $(CFLAGS) -Wall -o c/kernel
+	$(CC) -shared -o src/kernel.so $(CFLAGS) -Wall -fPIC src/kernel.h
 
-clean-kernel :
-	rm c/kernel
+clean :
+	rm src/kernel.so

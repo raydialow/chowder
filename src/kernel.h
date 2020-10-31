@@ -19,6 +19,7 @@
  */
 
 #define _KRNL_PREPRO_
+
 #include <assert.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -26,6 +27,15 @@
 #include <stddef.h>
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
+
+#define CHOWDER_V_MAJ       0x0
+#define CHOWDER_V_MIN       0x0
+#define CHOWDER_V_REV       0x0
+
+#define INNERLANDS_V_MAJ    0x0
+#define INNERLANDS_V_MIN    0x0
+#define INNERLANDS_V_REV    0x0
+
 #define BUFFER_SIZE_X_SMALL 0x0100
 #define BUFFER_SIZE_SMALL   0x0400
 #define BUFFER_SIZE_MEDIUM  0x0800
@@ -40,21 +50,10 @@ typedef uint32_t vkint;
 /*
  * Constants
  */
-const vkint chowder_version_major       = 0x0;
-const vkint chowder_version_minor       = 0x0;
-const vkint chowder_version_rev         = 0x0;
-const vkint innerlands_version_major    = 0x0;
-const vkint innerlands_version_minor    = 0x0;
-const vkint innerlands_version_rev      = 0x0;
-
 const char* chowder_name        = "Chowder";
+const vkint chowder_version     = VK_MAKE_VERSION(CHOWDER_V_MAJ, CHOWDER_V_MIN, CHOWDER_V_REV);
 const char* innerlands_name     = "Innerlands";
-const vkint chowder_version     = VK_MAKE_VERSION(chowder_version_major,
-                                                  chowder_version_minor,
-                                                  chowder_version_rev);
-const vkint innerlands_version  = VK_MAKE_VERSION(innerlands_version_major,
-                                                  innerlands_version_minor,
-                                                  innerlands_version_rev);
+const vkint innerlands_version  = VK_MAKE_VERSION(INNERLANDS_V_MAJ, INNERLANDS_V_MIN, INNERLANDS_V_REV);
 
 const vkint queue_count = 4;
 const float queue_priorities[] = {.5,.5,.5,.5};
@@ -62,7 +61,7 @@ const float queue_priorities[] = {.5,.5,.5,.5};
 /*
  * MAIN
  */
-int main()
+int init()
 {
     /*
      * Declaration
