@@ -50,16 +50,21 @@
 #| game objects |#
 (define-class <object> () ((id)))
 (define-method (get-id (obj <object>)) (slot-value obj 'id))
-(define-method (set-id (obj <object>) sym) (if (symbol? sym) (slot-set! obj 'id sym) '()))
+(define-method (set-id! (obj <object>) sym) (if (symbol? sym) (slot-set! obj 'id sym) '()))
 (define-class <asset> (<object>) ((path)))
 (define-method (get-path (obj <object>)) (slot-value obj 'path))
-(define-method (set-path (obj <object>) path) (if (string? path) (slot-set! obj 'path sym) '()))
-(define-class <image> (<asset>) ((size)(surface)))
-(define-method (load-image (img <image>) path)
-  (set-path img path)
+(define-method (set-path! (obj <object>) path) (if (string? path) (slot-set! obj 'path path) '()))
+(define-class <image> (<asset>) ((vis #f)(rect)(surface)))
+(define-method (get-vis (img <image>)) (slot-value img 'vis))
+(define-method (set-vis! (img <image>) value) (if (boolean? value) (slot-set! img 'vis value) '()))
+(define-method (get-rect (img <image>)) (slot-value img 'rect))
+(define-method (get-surface (img <image>)) (slot-value img 'surface))
+(define-method (load-image! (img <image>) path)
+  (set-path! img path)
   (slot-set! img 'surface (img:load path))
-  (slot-set! img 'size (vector (sdl:surface-w (slot-value img 'surface))
-							   (sdl:surface-h (slot-value img 'surface))))
+  (slot-set! img 'rect (sdl:make-rect 0 0
+									  (sdl:surface-w (slot-value img 'surface))
+									  (sdl:surface-h (slot-value img 'surface))))
   img)
 
 #| parameters |#
@@ -68,22 +73,40 @@
 #| initialization block |#
 (sdl:set-main-ready!)
 (sdl:init!)
-(img:init!)
+(img:init! '(png))
 (define main-window (apply sdl:create-window! (main-window-args)))
 (define main-renderer (sdl:create-renderer! main-window -1 '(accelerated)))
 (define main-surface (sdl:make-surface* (cadddr (main-window-args)) (car (cddddr (main-window-args))) 32))
-(define main-texture (sdl:create-texture-from-surface* main-renderer main-surface))
+(define main-texture '())
+(define object-list '())
+
+(define test-image (make <image>))
+(load-image! test-image "assets/square-color-256x256.png")
+(set-vis! test-image #t)
+
+(sdl:blit-surface! (get-surface test-image) (get-rect test-image) main-surface (get-rect test-image))
+
+(define ticks (sdl:get-ticks))
+(define big-delta 0)
 
 #| main SDK loop block |#
 (do ((quitting #f (sdl:quit-requested?)))
 	(quitting '())
-  #| present step |#
-  (sdl:render-clear! main-renderer)
-  (sdl:render-copy! main-renderer main-texture)
-  (sdl:render-present! main-renderer))
+  (let* ((new-ticks (sdl:get-ticks))
+		 (delta (- new-ticks ticks)))
+	(set! ticks new-ticks)
+	(set! big-delta (+ big-delta delta))
+	(if (> big-delta 16)
+		#| every frame |#
+		(begin (set! main-texture (sdl:create-texture-from-surface* main-renderer main-surface))
+			   (sdl:render-copy! main-renderer main-texture)
+			   (sdl:destroy-texture! main-texture)
+			   (sdl:render-present! main-renderer)
+			   (set! big-delta 0))))
+  #| every loop |#
+  '())
 
 #| shutdown block |#
-(sdl:destroy-texture! main-texture)
 (sdl:free-surface! main-surface)
 (sdl:destroy-renderer! main-renderer)
 (sdl:destroy-window! main-window)
