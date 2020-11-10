@@ -1,8 +1,7 @@
-CC=gcc
-CFLAGS=`pkg-config --static --libs vulkan glfw3`
+CC=chicken-csc
 
-kernel :
-	$(CC) -shared -o src/kernel.so $(CFLAGS) -Wall -fPIC src/kernel.h
+all :
+	$(CC) src/main.scm
 
 clean :
-	rm src/kernel.so
+	rm src/main
