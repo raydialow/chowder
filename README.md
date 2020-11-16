@@ -1,5 +1,5 @@
-# Chowder SDK and Engine
+# Chowder Game Engine
 
-Using SDL2 and Vulkan
+## Building
 
-presently unversioned. Come back later.
+Build requires OGRE and SDL2.
