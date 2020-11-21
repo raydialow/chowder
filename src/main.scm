@@ -21,7 +21,7 @@
 #| math utilities |#
 (define (^2 b) (expt b 2.0))
 (define (matrix r0 r1) (vector (vector-ref r0 0) (vector-ref r0 1)
-								  (vector-ref r1 0) (vector-ref r1 1)))
+							   (vector-ref r1 0) (vector-ref r1 1)))
 (define (matrix-ref M r c) (vector-ref M (+ (* r 2) c)))
 (define (matrix-row-ref M r) (vector (matrix-ref M r 0) (matrix-ref M r 1)))
 (define (matrix-col-ref M c) (vector (matrix-ref M 0 c) (matrix-ref M 1 c)))
@@ -63,22 +63,15 @@
 (define (vec-reflect-xy v) (vector*matrix v (matrix (vector -1 0) (vector 0 -1))))
  
 #| game objects |#
-(define-class <object> () ((id)))
-(define-method (get-id (obj <object>)) (slot-value obj 'id))
-(define-method (set-id! (obj <object>) sym) (if (symbol? sym) (slot-set! obj 'id sym) '()))
+(define-class <named> () ((id)))
+(define-method (get-id (obj <named>)) (slot-value obj 'id))
+(define-method (set-id! (obj <named>) sym) (if (symbol? sym) (slot-set! obj 'id sym) '()))
 
-(define-class <asset> (<object>) ((path)))
-(define-method (get-path (obj <object>)) (slot-value obj 'path))
-(define-method (set-path! (obj <object>) path) (if (string? path) (slot-set! obj 'path path) '()))
-
-(define-class <image> (<asset>) ((vis #f)(from-rect)(to-rect)(surface)))
-(define-method (get-vis (img <image>)) (slot-value img 'vis))
-(define-method (set-vis! (img <image>) value) (if (boolean? value) (slot-set! img 'vis value) '()))
+(define-class <image> () ((from-rect)(to-rect)(surface)))
 (define-method (get-from-rect (img <image>)) (slot-value img 'from-rect))
 (define-method (get-to-rect (img <image>)) (slot-value img 'to-rect))
 (define-method (get-surface (img <image>)) (slot-value img 'surface))
 (define-method (load-image! (img <image>) path)
-  (set-path! img path)
   (slot-set! img 'surface (img:load path))
   (slot-set! img 'from-rect (sdl:make-rect 0 0
 										   (sdl:surface-w (slot-value img 'surface))
@@ -87,9 +80,28 @@
 										 (sdl:surface-w (slot-value img 'surface))
 										 (sdl:surface-h (slot-value img 'surface))))
   img)
+(define-method (draw-image! (img <image>) to-surface) (sdl:blit-surface! (get-surface img)
+																		 (get-from-rect img)
+																		 to-surface
+																		 (get-to-rect img)))
 (define-method (move-image! (img <image>) vec)
   (sdl:rect-move! (slot-value img 'to-rect) (vec-x vec) (vec-y vec)))
 
+(define-class <sprite> (<object>) ((keys (vector))(pick 0)))
+(define-method (load-sprite! (sprt <sprite>) . paths)
+  (letrec ((load-images! (lambda (paths) (if (empty? paths)
+											 '()
+											 (let ((img (make <image>)))
+											   (load-image! img (car path))
+											   (cons img (load-images! (cdr path))))))))
+	(slot-set! sprt (list->vector (load-images! paths)))))
+(define-method (draw-sprite! (sprt <sprite>) to-surface)
+  (draw-image! (vector-ref (slot-value sprt 'keys) (slot-value sprt 'pick)) to-surface))
+(define-method (move-sprite! (sprt <sprite>) vec)
+  (do ((idx 0 (+ idx 1))
+	   (keys (slot-value sprt 'keys)))
+	  ((>= idx (vector-length keys)) '())
+	(move-image! (vector-ref keys idx) vec)))
 
 #| initialization block |#
 (sdl:set-main-ready!)
@@ -101,14 +113,7 @@
 (define main-texture '())
 (define object-list '())
 
-#| testing... |#
-#;(define test-image (make <image>))
-#;(load-image! test-image "assets/square-color-256x256.png")
-#;(set-vis! test-image #t)
-#;(sdl:blit-surface! (get-surface test-image) (get-from-rect test-image) 
-main-surface (get-to-rect test-image))
-
-#| main SDK loop block |#
+#| main loop block |#
 (do ((quitting #f (sdl:quit-requested?))
 	 (ticks (sdl:get-ticks))
 	 (big-delta 0))
