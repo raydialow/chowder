@@ -65,7 +65,7 @@
 #| game objects |#
 (define-class <named> () ((id)))
 (define-method (get-id (obj <named>)) (slot-get obj 'id))
-(define-method (set-id! (obj <named>) sym) (if (symbol? sym) (slot-set! obj 'id sym) '()))
+(define-method (set-id! (obj <named>) sym) (slot-set! obj 'id sym))
 
 (define-class <image> () ((from-rect)(to-rect)(surface)))
 (define-method (get-from-rect (img <image>)) (slot-get img 'from-rect))
@@ -87,7 +87,7 @@
 (define-method (move-image! (img <image>) vec)
   (sdl:rect-move! (slot-get img 'to-rect) (vec-x vec) (vec-y vec)))
 
-(define-class <sprite> (<named>) ((keys (vector))(pick 0)(animode 'oneshot)));modes are 'static, 'oneshot, 'pingpong, or 'random
+(define-class <sprite> (<named>) ((keys (vector))(pick 0)(animode 'static)));modes are 'static, 'oneshot, 'pingpong, or 'random
 (define-method (get-sprite-pick (sprt <sprite>)) (abs (slot-get sprt 'key)))
 (define-method (load-sprite! (sprt <sprite>) . paths)
   (letrec ((load-images! (lambda (paths) (if (empty? paths)
@@ -102,10 +102,11 @@
   (do ((idx 0 (+ idx 1)) (keys (slot-get sprt 'keys)))
 	  ((>= idx (vector-length keys)) '())
 	(move-image! (vector-ref keys idx) vec)))
+(define-method (sprite-pick! (sprt <sprite>) new-pick) (slot-set! sprt 'pick new-pick))
 (define-method (animate-sprite! (sprt <sprite>))
   (slot-set! sprt 'pick
 			 (let ((mode (slot-get sprt 'animode)))
-			   (cond ((eqv? mode 'static) 0)
+			   (cond ((eqv? mode 'static) (slot-get sprt 'pick))
 					 ((eqv? mode 'oneshot)
 					  (let ((old-pick (get-sprite-pick sprt))
 							(max-pick (- (vector-length (slot-get sprt 'keys)) 1)))
@@ -123,9 +124,22 @@
 					  (pseudo-random-integer (vector-length (slot-get sprt 'keys))))
 					 (else 0))))
 
-(define-class <tile> (<sprite>) ((collide? #f)))
-(define-method (collides? (tile <tile>)) (slot-get tile 'collide?))
-(define-method (collision-set! (tile <tile>) value) (slot-set! tile 'collide? value))
+(define-class <tile> (<sprite>) ((collide? #f)(collision-rects '())))
+(define-method (collision-set! (tile <tile>) value #!optional rects '())
+  (slot-set! tile 'collide? value) (slot-set! tile 'collision-rects rects))
+(define-method (collides? (tile <tile>) test-rect)
+  (if (not (slot-get tile 'collide?))
+	  #f
+	  (letrec ((test-rect test-rect)
+			   (collides-rec (lambda (rects)
+							   (if (empty? rects)
+								   '()
+								   (cons (sdl:has-intersection? test-rect (car rects))
+										 (collides-rec (cdr rects))))))
+			   (collides-lst (collides-rec (slot-get tile 'collision-rects))))
+		(foldl (lambda (a b) (or a b)) #f collides-lst))))
+										 
+(define-class <map> (<named>) ((canvas-size (0 . 0))(tiles '())(canvas)))
 
 #| initialization block |#
 (sdl:set-main-ready!)
