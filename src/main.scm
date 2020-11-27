@@ -2,20 +2,17 @@
 #|everything is under the license LICENSE in the root of this repository
   copyright June Rana 2020|#
 
-(import (prefix sdl2 "sdl:") (prefix sdl2-image "img:") coops (chicken random))
-
-#| parameters: todo these should load from a file |#
-(define main-window-title (make-parameter "Innerlands v0.0.0"))
-(define main-window-origin (make-parameter (cons 0 0)))
-(define main-window-dimens (make-parameter (cons 1280 720)))
-(define main-window-flags (make-parameter '(maximized)))
-(define main-window-args (let ((title (main-window-title))
-								 (xy (main-window-origin))
-								 (wh (main-window-dimens))
-								 (flags (main-window-flags)))
-							 (list title (car xy) (cdr xy) (car wh) (cdr wh) flags)))
+(import (chicken random)
+		coops
+		(prefix sdl2 "sdl:")
+		(prefix sdl2-image "img:"))
 
 #| general utilities |#
+(define (build-list proc end) (let ((ret '()))
+								(do ((idx 0 (add1 idx)))
+									((>= idx end) (reverse ret))
+								  (set! ret (cons (proc idx) ret)))))
+(define (range end) (build-list values end))
 (define (slot-get object slotname) (slot-value object slotname))
 (define (slot-set! object slotname value) (set! (slot-get object slotname) value))
 
@@ -72,74 +69,63 @@
 (define-method (get-to-rect (img <image>)) (slot-get img 'to-rect))
 (define-method (get-surface (img <image>)) (slot-get img 'surface))
 (define-method (load-image! (img <image>) path)
-  (slot-set! img 'surface (img:load path))
-  (slot-set! img 'from-rect (sdl:make-rect 0 0
-										   (sdl:surface-w (slot-get img 'surface))
-										   (sdl:surface-h (slot-get img 'surface))))
-  (slot-set! img 'to-rect (sdl:make-rect 0 0
-										 (sdl:surface-w (slot-get img 'surface))
-										 (sdl:surface-h (slot-get img 'surface))))
-  img)
+				   (slot-set! img 'surface (img:load path))
+				   (slot-set! img 'from-rect (sdl:make-rect 0 0
+															(sdl:surface-w (slot-get img 'surface))
+															(sdl:surface-h (slot-get img 'surface))))
+				   (slot-set! img 'to-rect (sdl:make-rect 0 0
+														  (sdl:surface-w (slot-get img 'surface))
+														  (sdl:surface-h (slot-get img 'surface)))))
 (define-method (draw-image! (img <image>) to-surface) (sdl:blit-surface! (get-surface img)
-																		 (get-from-rect img)
-																		 to-surface
-																		 (get-to-rect img)))
+																			 (get-from-rect img)
+																			 to-surface
+																			 (get-to-rect img)))
 (define-method (move-image! (img <image>) vec)
-  (sdl:rect-move! (slot-get img 'to-rect) (vec-x vec) (vec-y vec)))
+				   (sdl:rect-move! (slot-get img 'to-rect) (vec-x vec) (vec-y vec)))
 
-(define-class <sprite> (<named>) ((keys (vector))(pick 0)(animode 'static)));modes are 'static, 'oneshot, 'pingpong, or 'random
+(define-class <sprite> (<named>) ((keys (vector))(pick 0)(rect '())))
 (define-method (get-sprite-pick (sprt <sprite>)) (abs (slot-get sprt 'key)))
 (define-method (load-sprite! (sprt <sprite>) . paths)
-  (letrec ((load-images! (lambda (paths) (if (empty? paths)
-											 '()
-											 (let ((img (make <image>)))
-											   (load-image! img (car path))
-											   (cons img (load-images! (cdr path))))))))
-	(slot-set! sprt (list->vector (load-images! paths)))))
+				   (letrec ((load-images! (lambda (paths) (if (empty? paths)
+															  '()
+															  (let ((img (make <image>)))
+																(load-image! img (car path))
+																(cons img (load-images! (cdr path))))))))
+					 (slot-set! sprt (list->vector (load-images! paths))))
+				   (let* ((rects-lst (map get-from-rect (vector->list (slot-get tile 'keys))))
+						  (rects-chk (foldl sdl:rect=? (car rects-lst) (cdr rects-lst))))
+					 (if rects-chk
+						 (slot-set! tile 'rect (car rects-lst))
+						 (begin (print "sprite keys must be the same size!")
+								(slot-set! sprt 'keys (vector))))))
 (define-method (draw-sprite! (sprt <sprite>) to-surface)
-  (draw-image! (vector-ref (slot-get sprt 'keys) (get-sprite-pick sprt))) to-surface))
+				   (draw-image! (vector-ref (slot-get sprt 'keys) (get-sprite-pick sprt))) to-surface)
 (define-method (move-sprite! (sprt <sprite>) vec)
-  (do ((idx 0 (+ idx 1)) (keys (slot-get sprt 'keys)))
-	  ((>= idx (vector-length keys)) '())
-	(move-image! (vector-ref keys idx) vec)))
-(define-method (sprite-pick! (sprt <sprite>) new-pick) (slot-set! sprt 'pick new-pick))
-(define-method (animate-sprite! (sprt <sprite>))
-  (slot-set! sprt 'pick
-			 (let ((mode (slot-get sprt 'animode)))
-			   (cond ((eqv? mode 'static) (slot-get sprt 'pick))
-					 ((eqv? mode 'oneshot)
-					  (let ((old-pick (get-sprite-pick sprt))
-							(max-pick (- (vector-length (slot-get sprt 'keys)) 1)))
-						(if (eqv? old-pick max-pick)
-							0
-							(+ old-pick 1))))
-					 ((eqv? mode 'pingpong)
-					  (let ((old-pick (slot-get sprt 'pick))
-							(max-pick (- (vector-length (slot-get sprt 'keys)) 1)))
-						(if (< old-pick 0)
-							(if (eqv? old-pick (* -1 max-pick))
-								(- max-pick 1)
-								(- old-pick 1)))))
-					 ((eqv? mode 'random)
-					  (pseudo-random-integer (vector-length (slot-get sprt 'keys))))
-					 (else 0))))
+				   (do ((idx 0 (+ idx 1)) (keys (slot-get sprt 'keys)))
+					   ((>= idx (vector-length keys)) '())
+					 (move-image! (vector-ref keys idx) vec)))
+(define-method (sprite-pick! (sprt <sprite>) new-pick)
+  (if (memv new-pick (range (vector-length (slot-get sprt 'keys))))
+	  (slot-set! sprt 'pick new-pick)
+	  (print "sprite new key pick is out of bounds")))
 
-(define-class <tile> (<sprite>) ((collide? #f)(collision-rects '())))
-(define-method (collision-set! (tile <tile>) value #!optional rects '())
-  (slot-set! tile 'collide? value) (slot-set! tile 'collision-rects rects))
-(define-method (collides? (tile <tile>) test-rect)
-  (if (not (slot-get tile 'collide?))
-	  #f
-	  (letrec ((test-rect test-rect)
-			   (collides-rec (lambda (rects)
-							   (if (empty? rects)
-								   '()
-								   (cons (sdl:has-intersection? test-rect (car rects))
-										 (collides-rec (cdr rects))))))
-			   (collides-lst (collides-rec (slot-get tile 'collision-rects))))
-		(foldl (lambda (a b) (or a b)) #f collides-lst))))
-										 
-(define-class <map> (<named>) ((canvas-size (0 . 0))(tiles '())(canvas)))
+(define-class <tile> (<sprite>) ((collide? #f)))
+(define-method (collision-get (tile <tile>)) (values (slot-get tile 'collide?) (slot-get tile 'rect)))
+(define-method (collision-set! (tile <tile>) value) (slot-set! tile 'collide? value))
+
+(define-class <tilemap> (<named>) ((tileset (vector))(tile-by-number)(canvas-size)(canvas)))
+
+
+#| parameters: todo these should load from a "Chowder Settings" .chws (?) file |#
+(define main-window-title (make-parameter "Innerlands v0.0.0"))
+(define main-window-origin (make-parameter (cons 0 0)))
+(define main-window-dimens (make-parameter (cons 1280 720)))
+(define main-window-flags (make-parameter '(maximized)))
+(define main-window-args (let ((title (main-window-title))
+							   (xy (main-window-origin))
+							   (wh (main-window-dimens))
+							   (flags (main-window-flags)))
+						   (list title (car xy) (cdr xy) (car wh) (cdr wh) flags)))
 
 #| initialization block |#
 (sdl:set-main-ready!)
@@ -151,10 +137,11 @@
 (define main-texture '())
 (define object-list '())
 
-#| main loop block |#
+#| main loop block: todo, the rest of this should load from a "Chowder Game" .chwg (?) file |#
+#| also, the basic 'game loop' should be defined with more simple syntax |#
 (do ((quitting #f (sdl:quit-requested?))
 	 (ticks (sdl:get-ticks))
-	 (big-delta 0))
+	 (big-delta 0));there is certainly a better way to do this, fix this when you feel like it
 	#| exit cases |#
 	(quitting '())
   #| update loop parameters |#
@@ -164,12 +151,14 @@
 	(set! big-delta (+ big-delta lil-delta)))
   #| executes each frame (~60fps) |#
   (if (> big-delta 16)
+	  ; drawing for this frame is done on main-surface, then in begin below flips to screen
 	  (begin (set! main-texture (sdl:create-texture-from-surface* main-renderer main-surface))
 			 (sdl:render-copy! main-renderer main-texture)
 			 (sdl:destroy-texture! main-texture)
 			 (sdl:render-present! main-renderer)
 			 (set! big-delta (- big-delta 16))))
   #| every loop |#
+  ; whatever non-blocking sort of housekeeping needs to be quickly done
   '())
 
 #| shutdown block |#

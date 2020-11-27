@@ -1,7 +1,7 @@
 CC=chicken-csc
 
 all :
-	$(CC) src/main.scm
+	$(CC) src/main.scm -o bin/main
 
 clean :
-	rm src/main
+	rm bin/main
